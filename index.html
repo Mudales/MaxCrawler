@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>דשבורד הוצאות</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --card-hover: #222636;
+    --border: #2a2e3d;
+    --text: #e4e6ed;
+    --text-muted: #8b8fa3;
+    --accent: #6c63ff;
+    --accent2: #00d4aa;
+    --accent3: #ff6b8a;
+    --accent4: #ffa63e;
+    --accent5: #3eb8ff;
+    --green: #00d4aa;
+    --red: #ff6b8a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    direction: rtl;
+  }
+
+  .header {
+    background: linear-gradient(135deg, #1a1d27 0%, #252a3a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 24px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .header h1 {
+    font-size: 24px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--accent5));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .header-meta {
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  .upload-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    padding: 40px;
+  }
+
+  .upload-box {
+    border: 2px dashed var(--border);
+    border-radius: 16px;
+    padding: 60px 80px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    background: var(--card);
+    max-width: 520px;
+    width: 100%;
+  }
+
+  .upload-box:hover, .upload-box.drag-over {
+    border-color: var(--accent);
+    background: var(--card-hover);
+    transform: translateY(-2px);
+  }
+
+  .upload-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+  }
+
+  .upload-box h2 {
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+
+  .upload-box p {
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+
+  .upload-box input { display: none; }
+
+  .dashboard { display: none; padding: 24px 32px 40px; }
+
+  .summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  .s-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    transition: transform 0.2s;
+  }
+
+  .s-card:hover { transform: translateY(-2px); }
+
+  .s-card .label {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+
+  .s-card .value {
+    font-size: 28px;
+    font-weight: 700;
+  }
+
+  .s-card .sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 28px;
+  }
+
+  @media (max-width: 800px) {
+    .charts-grid { grid-template-columns: 1fr; }
+    .summary-cards { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  .chart-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+
+  .chart-card h3 {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+  }
+
+  .chart-card canvas { max-height: 280px; }
+
+  .full-width { grid-column: 1 / -1; }
+
+  .table-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  .table-section h3 {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+  }
+
+  .filters {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .filters select, .filters input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+
+  .filters input { width: 160px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  th {
+    text-align: right;
+    padding: 10px 12px;
+    border-bottom: 2px solid var(--border);
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+
+  th:hover { color: var(--accent); }
+  th .sort-arrow { margin-right: 4px; font-size: 10px; }
+
+  td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  tr:hover td { background: var(--card-hover); }
+
+  .cat-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .person-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    background: rgba(108,99,255,0.15);
+    color: var(--accent);
+  }
+
+  .amount-cell { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .btn-reset {
+    position: fixed;
+    bottom: 24px;
+    left: 24px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 10px 20px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.2s;
+    z-index: 100;
+  }
+
+  .btn-reset:hover {
+    background: var(--card-hover);
+    color: var(--text);
+    border-color: var(--accent);
+  }
+
+  .table-scroll { max-height: 500px; overflow-y: auto; }
+  .table-scroll::-webkit-scrollbar { width: 6px; }
+  .table-scroll::-webkit-scrollbar-track { background: transparent; }
+  .table-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .member-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 28px;
+  }
+
+  @media (max-width: 800px) { .member-section { grid-template-columns: 1fr; } }
+
+  .member-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+
+  .member-card h3 {
+    font-size: 15px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .member-stat {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+
+  .member-stat:last-child { border-bottom: none; }
+  .member-stat .ms-label { color: var(--text-muted); }
+  .member-stat .ms-val { font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div id="uploadView" class="upload-zone">
+  <div class="upload-box" id="dropZone">
+    <div class="upload-icon">📊</div>
+    <h2>העלה קובץ JSON של טלגרם</h2>
+    <p>גרור לכאן או לחץ לבחירת קובץ<br><span style="font-size:12px;color:#555">ייצוא היסטוריית צ'אט מטלגרם (result.json)</span></p>
+    <input type="file" id="fileInput" accept=".json">
+  </div>
+</div>
+
+<div id="dashboardView" class="dashboard">
+  <div class="header">
+    <div>
+      <h1 id="groupTitle">דשבורד הוצאות</h1>
+      <div class="header-meta" id="headerMeta"></div>
+    </div>
+    <div style="text-align:left">
+      <div class="header-meta" id="headerRange"></div>
+    </div>
+  </div>
+
+  <div style="height:20px"></div>
+
+  <div class="summary-cards" id="summaryCards"></div>
+
+  <div class="member-section" id="memberSection"></div>
+
+  <div class="charts-grid">
+    <div class="chart-card">
+      <h3>🏷️ חלוקה לפי קטגוריה</h3>
+      <canvas id="catPieChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <h3>📈 מגמת הוצאות חודשית</h3>
+      <canvas id="monthlyChart"></canvas>
+    </div>
+    <div class="chart-card full-width">
+      <h3>📊 הוצאות לפי קטגוריה וחודש</h3>
+      <canvas id="catMonthlyChart"></canvas>
+    </div>
+  </div>
+
+  <div class="table-section">
+    <h3>📝 כל ההוצאות</h3>
+    <div class="filters">
+      <select id="filterCat"><option value="">כל הקטגוריות</option></select>
+      <select id="filterPerson"><option value="">כל המשתתפים</option></select>
+      <input type="month" id="filterMonth">
+      <input type="text" id="filterText" placeholder="חיפוש חופשי...">
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr id="tableHead"></tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <div style="margin-top:12px;color:var(--text-muted);font-size:12px" id="tableCount"></div>
+  </div>
+
+  <button class="btn-reset" onclick="resetView()">📂 העלה קובץ חדש</button>
+</div>
+
+<script>
+const COLORS = ['#6c63ff','#00d4aa','#ff6b8a','#ffa63e','#3eb8ff','#e563ff','#63ffd4','#ff9363','#63b4ff','#c4ff63','#ff63a5','#63ffe0'];
+const CAT_ICONS = {'סופר':'🛒','שונות':'📦','בגדים':'👕','מסעדה':'🍽️','דלק':'⛽','רפואי':'💊','ביטוח':'🛡️','חינוך':'📚','בילוי':'🎬','בית':'🏠','רכב':'🚗','חשבונות':'📄','תחבורה':'🚌','מתנות':'🎁'};
+
+let allExpenses = [];
+let charts = {};
+let sortCol = 'date';
+let sortDir = -1;
+
+// Upload handling
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) processFile(e.target.files[0]); });
+
+function processFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const json = JSON.parse(e.target.result);
+      const expenses = parseExpenses(json);
+      if (expenses.length === 0) {
+        alert('לא נמצאו הוצאות בקובץ. ודא שזהו ייצוא צ\'אט טלגרם עם הוצאות מתויגות ב-hashtag.');
+        return;
+      }
+      allExpenses = expenses;
+      renderDashboard(json, expenses);
+    } catch (err) {
+      alert('שגיאה בקריאת הקובץ: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function parseExpenses(json) {
+  const expenses = [];
+  const messages = json.messages || [];
+
+  for (const msg of messages) {
+    if (msg.type !== 'message') continue;
+
+    let fullText = '';
+    let category = '';
+    const textParts = Array.isArray(msg.text) ? msg.text : [msg.text];
+
+    for (const part of textParts) {
+      if (typeof part === 'string') {
+        fullText += part;
+      } else if (part && typeof part === 'object') {
+        if (part.type === 'hashtag') {
+          category = part.text.replace('#', '').trim();
+        }
+        fullText += part.text || '';
+      }
+    }
+
+    if (!category) continue;
+
+    const lines = fullText.replace(/#\S+/g, '').trim().split('\n').map(l => l.trim()).filter(Boolean);
+    
+    // Find amount line and treat all non-amount, non-hashtag lines as description
+    let amount = 0;
+    const descParts = [];
+
+    for (const line of lines) {
+      const numMatch = line.match(/^[\d,]+\.?\d*$/);
+      if (numMatch && !amount) {
+        amount = parseFloat(line.replace(',', ''));
+      } else if (line.match(/^([\d,]+\.?\d*)\s+(.+)/)) {
+        // "12700 קניית מחשב" — number with text on same line
+        const m = line.match(/^([\d,]+\.?\d*)\s+(.+)/);
+        if (!amount) amount = parseFloat(m[1].replace(',', ''));
+        descParts.push(m[2].trim());
+      } else if (!line.match(/^[\d,]+\.?\d*$/)) {
+        // Non-numeric line = description
+        descParts.push(line);
+      }
+    }
+
+    const description = descParts.join(' ').trim() || '';
+
+    if (amount > 0) {
+      expenses.push({
+        date: msg.date,
+        from: msg.from || msg.from_id || 'לא ידוע',
+        category,
+        amount,
+        description
+      });
+    }
+  }
+
+  return expenses.sort((a, b) => new Date(a.date) - new Date(b.date));
+}
+
+function shortName(name) {
+  if (!name) return '?';
+  const parts = name.split(' ');
+  return parts[0];
+}
+
+function renderDashboard(json, expenses) {
+  document.getElementById('uploadView').style.display = 'none';
+  document.getElementById('dashboardView').style.display = 'block';
+
+  const title = json.name || 'הוצאות';
+  document.getElementById('groupTitle').textContent = '📊 ' + title;
+
+  const members = json.messages?.find(m => m.action === 'create_group')?.members || [];
+  document.getElementById('headerMeta').textContent = members.length ? 'משתתפים: ' + members.map(shortName).join(', ') : '';
+
+  const dates = expenses.map(e => new Date(e.date));
+  const minD = new Date(Math.min(...dates));
+  const maxD = new Date(Math.max(...dates));
+  document.getElementById('headerRange').textContent = 
+    `${minD.toLocaleDateString('he-IL')} — ${maxD.toLocaleDateString('he-IL')}`;
+
+  const total = expenses.reduce((s, e) => s + e.amount, 0);
+  const cats = [...new Set(expenses.map(e => e.category))];
+  const people = [...new Set(expenses.map(e => e.from))];
+  const months = [...new Set(expenses.map(e => e.date.slice(0, 7)))].sort();
+  const avgMonthly = months.length ? total / months.length : total;
+
+  // Summary cards
+  const topCat = Object.entries(expenses.reduce((a, e) => { a[e.category] = (a[e.category]||0) + e.amount; return a; }, {}))
+    .sort((a, b) => b[1] - a[1])[0];
+
+  document.getElementById('summaryCards').innerHTML = `
+    <div class="s-card"><div class="label">סה"כ הוצאות</div><div class="value" style="color:var(--accent)">₪${total.toLocaleString('he-IL', {maximumFractionDigits:0})}</div><div class="sub">${expenses.length} רשומות</div></div>
+    <div class="s-card"><div class="label">ממוצע חודשי</div><div class="value" style="color:var(--accent2)">₪${avgMonthly.toLocaleString('he-IL', {maximumFractionDigits:0})}</div><div class="sub">${months.length} חודשים</div></div>
+    <div class="s-card"><div class="label">קטגוריות</div><div class="value" style="color:var(--accent4)">${cats.length}</div><div class="sub">הגדולה: ${topCat ? (CAT_ICONS[topCat[0]]||'') + ' ' + topCat[0] : '-'}</div></div>
+    <div class="s-card"><div class="label">ממוצע לרשומה</div><div class="value" style="color:var(--accent3)">₪${(total/expenses.length).toLocaleString('he-IL', {maximumFractionDigits:0})}</div><div class="sub">מדיאנה: ₪${median(expenses.map(e=>e.amount)).toLocaleString('he-IL',{maximumFractionDigits:0})}</div></div>
+  `;
+
+  // Member breakdown
+  if (people.length > 1) {
+    let memberHTML = '';
+    for (const p of people) {
+      const pExp = expenses.filter(e => e.from === p);
+      const pTotal = pExp.reduce((s, e) => s + e.amount, 0);
+      const pCats = {};
+      pExp.forEach(e => { pCats[e.category] = (pCats[e.category]||0) + e.amount; });
+      const topPCat = Object.entries(pCats).sort((a,b) => b[1]-a[1])[0];
+      memberHTML += `
+        <div class="member-card">
+          <h3>👤 ${shortName(p)}</h3>
+          <div class="member-stat"><span class="ms-label">סה"כ</span><span class="ms-val">₪${pTotal.toLocaleString('he-IL',{maximumFractionDigits:0})}</span></div>
+          <div class="member-stat"><span class="ms-label">רשומות</span><span class="ms-val">${pExp.length}</span></div>
+          <div class="member-stat"><span class="ms-label">אחוז מהכלל</span><span class="ms-val">${(pTotal/total*100).toFixed(1)}%</span></div>
+          <div class="member-stat"><span class="ms-label">קטגוריה עיקרית</span><span class="ms-val">${topPCat ? (CAT_ICONS[topPCat[0]]||'') + ' ' + topPCat[0] : '-'}</span></div>
+        </div>
+      `;
+    }
+    document.getElementById('memberSection').innerHTML = memberHTML;
+  }
+
+  // Filters
+  const filterCat = document.getElementById('filterCat');
+  filterCat.innerHTML = '<option value="">כל הקטגוריות</option>' + cats.map(c => `<option value="${c}">${(CAT_ICONS[c]||'')} ${c}</option>`).join('');
+
+  const filterPerson = document.getElementById('filterPerson');
+  filterPerson.innerHTML = '<option value="">כל המשתתפים</option>' + people.map(p => `<option value="${p}">${shortName(p)}</option>`).join('');
+
+  filterCat.onchange = filterPerson.onchange = document.getElementById('filterMonth').onchange = document.getElementById('filterText').oninput = renderTable;
+
+  // Charts
+  renderCharts(expenses, cats, months);
+  renderTable();
+}
+
+function renderCharts(expenses, cats, months) {
+  Object.values(charts).forEach(c => c.destroy());
+  charts = {};
+
+  const catTotals = {};
+  expenses.forEach(e => { catTotals[e.category] = (catTotals[e.category]||0) + e.amount; });
+  const sortedCats = Object.entries(catTotals).sort((a,b) => b[1]-a[1]);
+
+  charts.pie = new Chart(document.getElementById('catPieChart'), {
+    type: 'doughnut',
+    data: {
+      labels: sortedCats.map(([c]) => (CAT_ICONS[c]||'') + ' ' + c),
+      datasets: [{
+        data: sortedCats.map(([,v]) => v),
+        backgroundColor: COLORS.slice(0, sortedCats.length),
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'right', labels: { color: '#8b8fa3', font: { size: 11 }, padding: 10 } },
+        tooltip: { callbacks: { label: ctx => `₪${ctx.raw.toLocaleString('he-IL', {maximumFractionDigits:0})} (${(ctx.raw/expenses.reduce((s,e)=>s+e.amount,0)*100).toFixed(1)}%)` } }
+      }
+    }
+  });
+
+  const monthlyData = {};
+  expenses.forEach(e => {
+    const m = e.date.slice(0, 7);
+    monthlyData[m] = (monthlyData[m]||0) + e.amount;
+  });
+
+  charts.monthly = new Chart(document.getElementById('monthlyChart'), {
+    type: 'line',
+    data: {
+      labels: months.map(m => { const [y, mo] = m.split('-'); return `${mo}/${y.slice(2)}`; }),
+      datasets: [{
+        label: 'סה"כ חודשי',
+        data: months.map(m => monthlyData[m] || 0),
+        borderColor: '#6c63ff',
+        backgroundColor: 'rgba(108,99,255,0.1)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 3,
+        pointHoverRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `₪${ctx.raw.toLocaleString('he-IL',{maximumFractionDigits:0})}` } } },
+      scales: {
+        x: { ticks: { color: '#8b8fa3', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { ticks: { color: '#8b8fa3', callback: v => '₪' + (v>=1000 ? (v/1000).toFixed(0)+'K' : v) }, grid: { color: 'rgba(255,255,255,0.05)' } }
+      }
+    }
+  });
+
+  // Stacked bar
+  const top6cats = sortedCats.slice(0, 6).map(([c]) => c);
+  const catMonthly = {};
+  expenses.forEach(e => {
+    const m = e.date.slice(0, 7);
+    const cat = top6cats.includes(e.category) ? e.category : 'אחר';
+    if (!catMonthly[cat]) catMonthly[cat] = {};
+    catMonthly[cat][m] = (catMonthly[cat][m]||0) + e.amount;
+  });
+
+  const stackCats = [...top6cats];
+  if (Object.keys(catMonthly).includes('אחר')) stackCats.push('אחר');
+
+  charts.catMonthly = new Chart(document.getElementById('catMonthlyChart'), {
+    type: 'bar',
+    data: {
+      labels: months.map(m => { const [y, mo] = m.split('-'); return `${mo}/${y.slice(2)}`; }),
+      datasets: stackCats.map((cat, i) => ({
+        label: (CAT_ICONS[cat]||'') + ' ' + cat,
+        data: months.map(m => (catMonthly[cat]||{})[m] || 0),
+        backgroundColor: COLORS[i % COLORS.length],
+        borderRadius: 3
+      }))
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: '#8b8fa3', font: { size: 11 } } },
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ₪${ctx.raw.toLocaleString('he-IL',{maximumFractionDigits:0})}` } }
+      },
+      scales: {
+        x: { stacked: true, ticks: { color: '#8b8fa3', font: { size: 10 } }, grid: { display: false } },
+        y: { stacked: true, ticks: { color: '#8b8fa3', callback: v => '₪' + (v>=1000 ? (v/1000).toFixed(0)+'K' : v) }, grid: { color: 'rgba(255,255,255,0.05)' } }
+      }
+    }
+  });
+}
+
+function renderTable() {
+  const fc = document.getElementById('filterCat').value;
+  const fp = document.getElementById('filterPerson').value;
+  const fm = document.getElementById('filterMonth').value;
+  const ft = document.getElementById('filterText').value.toLowerCase();
+
+  let filtered = allExpenses.filter(e => {
+    if (fc && e.category !== fc) return false;
+    if (fp && e.from !== fp) return false;
+    if (fm && !e.date.startsWith(fm)) return false;
+    if (ft && !(e.description.toLowerCase().includes(ft) || e.category.toLowerCase().includes(ft) || e.from.toLowerCase().includes(ft))) return false;
+    return true;
+  });
+
+  filtered.sort((a, b) => {
+    let va = a[sortCol], vb = b[sortCol];
+    if (sortCol === 'amount') return (va - vb) * sortDir;
+    if (sortCol === 'date') return (new Date(va) - new Date(vb)) * sortDir;
+    return String(va).localeCompare(String(vb), 'he') * sortDir;
+  });
+
+  const cols = [
+    { key: 'date', label: 'תאריך' },
+    { key: 'from', label: 'מי' },
+    { key: 'category', label: 'קטגוריה' },
+    { key: 'description', label: 'תיאור' },
+    { key: 'amount', label: 'סכום' }
+  ];
+
+  document.getElementById('tableHead').innerHTML = cols.map(c =>
+    `<th onclick="sortTable('${c.key}')">${c.label} <span class="sort-arrow">${sortCol===c.key ? (sortDir>0?'▲':'▼') : ''}</span></th>`
+  ).join('');
+
+  const cats = [...new Set(allExpenses.map(e => e.category))];
+
+  document.getElementById('tableBody').innerHTML = filtered.map(e => {
+    const ci = cats.indexOf(e.category) % COLORS.length;
+    const d = new Date(e.date);
+    return `<tr>
+      <td>${d.toLocaleDateString('he-IL')} <span style="color:var(--text-muted);font-size:11px">${d.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'})}</span></td>
+      <td><span class="person-badge">${shortName(e.from)}</span></td>
+      <td><span class="cat-badge" style="background:${COLORS[ci]}22;color:${COLORS[ci]}">${(CAT_ICONS[e.category]||'')} ${e.category}</span></td>
+      <td>${e.description}</td>
+      <td class="amount-cell">₪${e.amount.toLocaleString('he-IL', {maximumFractionDigits:0})}</td>
+    </tr>`;
+  }).join('');
+
+  const filteredTotal = filtered.reduce((s, e) => s + e.amount, 0);
+  document.getElementById('tableCount').textContent = `מציג ${filtered.length} מתוך ${allExpenses.length} רשומות | סה"כ מסונן: ₪${filteredTotal.toLocaleString('he-IL', {maximumFractionDigits:0})}`;
+}
+
+window.sortTable = function(col) {
+  if (sortCol === col) sortDir *= -1;
+  else { sortCol = col; sortDir = -1; }
+  renderTable();
+};
+
+function resetView() {
+  document.getElementById('uploadView').style.display = 'flex';
+  document.getElementById('dashboardView').style.display = 'none';
+  fileInput.value = '';
+  allExpenses = [];
+  Object.values(charts).forEach(c => c.destroy());
+  charts = {};
+}
+
+function median(arr) {
+  if (!arr.length) return 0;
+  const s = [...arr].sort((a,b) => a-b);
+  const mid = Math.floor(s.length/2);
+  return s.length % 2 ? s[mid] : (s[mid-1]+s[mid])/2;
+}
+</script>
+</body>
+</html>

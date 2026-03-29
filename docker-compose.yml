@@ -1,0 +1,10 @@
+services:
+  maxcrawler:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./transactions.db:/app/transactions.db
+      - ./.env:/app/.env
+      - ./.sessions:/app/.sessions
+    restart: unless-stopped

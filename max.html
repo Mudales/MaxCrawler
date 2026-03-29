@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MAX — דשבורד חיובי אשראי</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<style>
+  html { zoom: 1.25; }
+  :root {
+    --bg: #0f1117; --card: #1a1d27; --card-hover: #222636;
+    --border: #2a2e3d; --text: #e4e6ed; --text-muted: #8b8fa3;
+    --accent: #6c63ff; --accent2: #00d4aa; --accent3: #ff6b8a;
+    --accent4: #ffa63e; --accent5: #3eb8ff;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Segoe UI',Tahoma,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; direction:rtl; }
+
+  /* header */
+  .header {
+    background:linear-gradient(135deg,#1a1d27,#252a3a);
+    border-bottom:1px solid var(--border);
+    padding:16px 28px;
+    display:flex; align-items:center; justify-content:space-between;
+    flex-wrap:wrap; gap:10px; position:sticky; top:0; z-index:50;
+  }
+  .header h1 { font-size:20px; font-weight:700; background:linear-gradient(135deg,var(--accent),var(--accent5)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .header-meta { color:var(--text-muted); font-size:11px; margin-top:2px; }
+  .header-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+
+  /* person filter */
+  .person-tabs { display:flex; gap:4px; }
+  .person-tab {
+    padding:6px 14px; border-radius:20px; border:1px solid var(--border);
+    background:transparent; color:var(--text-muted); font-size:12px;
+    font-family:inherit; cursor:pointer; transition:all .2s;
+  }
+  .person-tab:hover { border-color:var(--accent); color:var(--text); }
+  .person-tab.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+  /* month select */
+  .month-select {
+    background:var(--card); border:1px solid var(--border); color:var(--text);
+    padding:7px 12px; border-radius:8px; font-size:13px; font-family:inherit;
+  }
+
+  /* buttons */
+  .btn { padding:7px 16px; border-radius:8px; border:none; font-size:13px; font-family:inherit; cursor:pointer; transition:all .2s; display:flex; align-items:center; gap:5px; }
+  .btn-primary { background:var(--accent); color:#fff; }
+  .btn-primary:hover { background:#7c74ff; }
+  .btn-primary:disabled { opacity:.6; cursor:not-allowed; }
+  .btn-success { background:#00a37a; color:#fff; }
+  .btn-success:hover { background:#00c090; }
+  .btn-ghost { background:var(--card); border:1px solid var(--border); color:var(--text-muted); }
+  .btn-ghost:hover { color:var(--text); border-color:var(--accent); }
+  .btn-danger { background:#c0392b; color:#fff; font-size:11px; padding:3px 8px; }
+  .btn-danger:hover { background:#e74c3c; }
+
+  /* state views */
+  .state-view { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:60vh; gap:14px; color:var(--text-muted); text-align:center; }
+  .spinner { width:38px; height:38px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* layout */
+  .main { padding:20px 28px 48px; }
+  .section-title { font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:12px; margin-top:24px; }
+
+  /* KPI */
+  .kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; }
+  .kpi { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px 18px; transition:transform .2s; }
+  .kpi:hover { transform:translateY(-2px); }
+  .kpi .label { font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px; }
+  .kpi .value { font-size:24px; font-weight:700; }
+  .kpi .sub { font-size:11px; color:var(--text-muted); margin-top:3px; }
+
+  /* categories */
+  .cat-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:12px; }
+  .cat-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:14px 16px; transition:transform .2s, border-color .2s; cursor:pointer; }
+  .cat-card:hover { transform:translateY(-2px); border-color:var(--accent); }
+  .cat-card.active { border-color:var(--accent); background:#1e2035; }
+  .cat-head { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .cat-icon { font-size:20px; width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .cat-name { font-size:13px; font-weight:600; }
+  .cat-count { font-size:11px; color:var(--text-muted); margin-top:1px; }
+  .cat-total { font-size:20px; font-weight:700; margin-bottom:8px; }
+  .cat-months { display:flex; flex-direction:column; gap:3px; }
+  .cat-month-row { display:flex; align-items:center; gap:6px; font-size:11px; }
+  .cat-month-label { color:var(--text-muted); width:36px; flex-shrink:0; }
+  .cat-month-bar-wrap { flex:1; background:var(--border); border-radius:3px; height:4px; }
+  .cat-month-bar { height:4px; border-radius:3px; transition:width .4s; }
+  .cat-month-val { color:var(--text-muted); width:58px; text-align:left; flex-shrink:0; }
+
+  /* charts */
+  .charts-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .chart-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px 18px; }
+  .chart-card h3 { font-size:12px; color:var(--text-muted); margin-bottom:12px; }
+  .chart-card canvas { max-height:250px; }
+  .full-width { grid-column:1/-1; }
+
+  /* table */
+  .table-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px 18px; }
+  .table-card h3 { font-size:12px; color:var(--text-muted); margin-bottom:12px; }
+  .filters { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center; }
+  .filters select, .filters input[type=text] { background:var(--bg); border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:8px; font-size:12px; font-family:inherit; }
+  .filters input[type=text] { width:150px; }
+  .table-wrap { max-height:460px; overflow-y:auto; }
+  .table-wrap::-webkit-scrollbar { width:5px; }
+  .table-wrap::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th { text-align:right; padding:8px 10px; border-bottom:2px solid var(--border); color:var(--text-muted); font-size:11px; font-weight:600; text-transform:uppercase; cursor:pointer; user-select:none; white-space:nowrap; }
+  th:hover { color:var(--accent); }
+  td { padding:8px 10px; border-bottom:1px solid var(--border); }
+  tr:hover td { background:var(--card-hover); }
+  .badge { display:inline-flex; align-items:center; gap:3px; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600; }
+  .owner-badge { font-size:11px; padding:2px 8px; border-radius:12px; }
+  .source-dot { font-size:10px; }
+  .amount-cell { font-weight:600; font-variant-numeric:tabular-nums; }
+  .table-footer { margin-top:8px; color:var(--text-muted); font-size:11px; display:flex; justify-content:space-between; }
+
+  /* modal base */
+  .overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:200; align-items:center; justify-content:center; }
+  .overlay.visible { display:flex; }
+  .modal { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:22px; width:480px; max-width:92vw; }
+  .modal.wide { width:640px; }
+  .modal h3 { margin-bottom:16px; font-size:16px; }
+  .modal-footer { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+
+  /* note cell */
+  .note-cell { color:var(--text-muted); font-size:11px; cursor:pointer; min-width:80px; }
+  .note-cell:hover { color:var(--text); }
+  .note-cell.empty::before { content:'＋ הערה'; opacity:.4; }
+  .note-input { background:var(--bg); border:1px solid var(--accent); color:var(--text); padding:4px 8px; border-radius:6px; font-size:12px; font-family:inherit; width:160px; }
+
+  /* categories table */
+  .cat-row { display:grid; grid-template-columns:44px 1fr 36px; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); }
+  .cat-row:last-child { border-bottom:none; }
+  .cat-icon-input { background:var(--bg); border:1px solid var(--border); color:var(--text); padding:4px; border-radius:6px; font-size:18px; text-align:center; width:36px; }
+  .cat-name-input { background:var(--bg); border:1px solid var(--border); color:var(--text); padding:5px 8px; border-radius:6px; font-size:13px; font-family:inherit; width:100%; }
+
+  /* form fields */
+  .form-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; }
+  .form-row.full { grid-template-columns:1fr; }
+  label { display:block; font-size:11px; color:var(--text-muted); margin-bottom:4px; }
+  input[type=text], input[type=number], input[type=date], select.form-select, textarea {
+    width:100%; background:var(--bg); border:1px solid var(--border); color:var(--text);
+    padding:8px 10px; border-radius:8px; font-size:13px; font-family:inherit;
+  }
+  input:focus, select.form-select:focus, textarea:focus { outline:none; border-color:var(--accent); }
+  textarea { resize:vertical; min-height:60px; }
+
+  /* sync log */
+  .log-pre { background:#0a0c12; border-radius:8px; padding:12px; font-size:11px; font-family:monospace; white-space:pre-wrap; max-height:240px; overflow-y:auto; color:var(--accent2); margin-bottom:12px; }
+
+  /* kebab menu */
+  .kebab-wrap { position:relative; }
+  .kebab-btn  { font-size:20px; line-height:1; padding:4px 12px; letter-spacing:1px; }
+  .kebab-dropdown {
+    display:none; position:absolute; top:calc(100% + 6px); left:0;
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    box-shadow:0 6px 24px rgba(0,0,0,.5); min-width:190px; z-index:300; padding:6px;
+  }
+  .kebab-dropdown.open { display:block; }
+  .kebab-dropdown button {
+    display:flex; width:100%; padding:10px 14px; gap:10px; align-items:center;
+    background:transparent; border:none; color:var(--text); cursor:pointer;
+    border-radius:7px; font-size:13px; font-family:inherit; text-align:right;
+  }
+  .kebab-dropdown button:hover { background:var(--card-hover); }
+  .kebab-sep { border:none; border-top:1px solid var(--border); margin:5px 0; }
+
+  /* responsive table column hiding */
+  .col-note, .col-owner, .col-source, .col-del { }
+
+  @media(max-width:800px) {
+    html { zoom:1; }
+    .charts-grid { grid-template-columns:1fr; }
+    .cat-grid { grid-template-columns:1fr 1fr; }
+    .kpi-grid { grid-template-columns:repeat(2,1fr); }
+    .main { padding:12px; }
+    .header { padding:10px 12px; gap:8px; }
+    .header-actions { gap:6px; }
+    .form-row { grid-template-columns:1fr; }
+    .filters { gap:6px; }
+    .filters select, .filters input[type=text] { font-size:11px; }
+    .table-wrap { max-height:380px; }
+    td, th { padding:7px 7px; }
+    .col-note, .col-source { display:none; }
+  }
+  @media(max-width:540px) {
+    .kpi-grid { grid-template-columns:1fr 1fr; }
+    .cat-grid { grid-template-columns:1fr; }
+    .col-owner { display:none; }
+    .person-tabs { max-width:55vw; overflow-x:auto; flex-wrap:nowrap; }
+    .person-tab  { white-space:nowrap; }
+    .month-select { max-width:110px; font-size:12px; }
+  }
+  @media(max-width:400px) {
+    .kpi-grid { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>💳 MAX — דשבורד חיובי אשראי</h1>
+    <div class="header-meta" id="headerMeta">טוען…</div>
+  </div>
+  <div class="header-actions">
+    <div class="person-tabs" id="personTabs"></div>
+    <select class="month-select" id="globalMonth"></select>
+    <button class="btn btn-success" onclick="openAddModal()">＋ הוסף הוצאה</button>
+    <div class="kebab-wrap">
+      <button class="btn btn-ghost kebab-btn" onclick="toggleKebab(event)" title="פעולות נוספות">⋮</button>
+      <div class="kebab-dropdown" id="kebabMenu">
+        <button onclick="openSyncModal();closeKebab()">🔄 סנכרן</button>
+        <button onclick="openRecurringModal();closeKebab()">🔁 הוצאות קבועות</button>
+        <button onclick="openCatsModal();closeKebab()">⚙️ קטגוריות</button>
+        <button onclick="exportCSV();closeKebab()">📥 ייצוא CSV</button>
+        <hr class="kebab-sep">
+        <button onclick="openSyncModal();closeKebab()">🗑️ איפוס DB (בסנכרון)</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="state-view" id="loadingView"><div class="spinner"></div><div>טוען נתונים…</div></div>
+<div class="state-view" id="emptyView" style="display:none">
+  <div style="font-size:48px">💳</div>
+  <div style="font-size:17px;font-weight:600">אין נתונים</div>
+  <div>לחץ <strong>סנכרן</strong> כדי למשוך נתונים מ-MAX</div>
+</div>
+
+<div class="main" id="mainView" style="display:none">
+
+  <div class="section-title">סיכום</div>
+  <div class="kpi-grid" id="kpiGrid"></div>
+
+  <div class="section-title">קטגוריות — סכום וחלוקה חודשית</div>
+  <div class="cat-grid" id="catGrid"></div>
+
+  <div class="section-title">חלוקה לפי קטגוריה</div>
+  <div class="chart-card">
+    <canvas id="chartPie" style="max-height:420px"></canvas>
+  </div>
+
+  <div class="section-title">עסקאות</div>
+  <div class="table-card">
+    <div class="filters">
+      <select id="fCat"><option value="">כל הקטגוריות</option></select>
+      <select id="fCard"><option value="">כל הכרטיסים</option></select>
+      <select id="fPlan"><option value="">כל התוכניות</option></select>
+      <input type="text" id="fText" placeholder="🔍 חיפוש סוחר…">
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr id="tableHead"></tr></thead><tbody id="tableBody"></tbody></table>
+    </div>
+    <div class="table-footer"><span id="tableCount"></span><span id="tableTotal"></span></div>
+  </div>
+</div>
+
+<!-- ═══ Add expense modal ════════════════════════════════════════════ -->
+<div class="overlay" id="addOverlay">
+  <div class="modal">
+    <h3>＋ הוספת הוצאה ידנית</h3>
+    <div class="form-row">
+      <div>
+        <label>תאריך עסקה</label>
+        <input type="date" id="addDate">
+      </div>
+      <div>
+        <label>סכום (₪)</label>
+        <input type="number" id="addAmount" min="0" step="0.01" placeholder="0.00">
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label>שם סוחר / תיאור</label>
+        <input type="text" id="addMerchant" placeholder="למשל: מזומן בסופר">
+      </div>
+      <div>
+        <label>קטגוריה</label>
+        <select class="form-select" id="addCategory"></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label>מבצע עסקה</label>
+        <select class="form-select" id="addOwner"></select>
+      </div>
+      <div>
+        <label>מקור</label>
+        <select class="form-select" id="addSource">
+          <option value="מזומן">💵 מזומן</option>
+          <option value="העברה">🏦 העברה בנקאית</option>
+          <option value="ביט">📲 ביט / פייבוקס</option>
+          <option value="אחר">📦 אחר</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row full">
+      <div>
+        <label>הערה (אופציונלי)</label>
+        <textarea id="addNote" placeholder="פרטים נוספים…"></textarea>
+      </div>
+    </div>
+    <div id="addError" style="color:var(--accent3);font-size:12px;margin-top:6px;display:none"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeAddModal()">ביטול</button>
+      <button class="btn btn-success" id="addSubmitBtn" onclick="submitAdd()">הוסף הוצאה</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Categories modal ═════════════════════════════════════════════ -->
+<div class="overlay" id="catsOverlay">
+  <div class="modal wide">
+    <h3>⚙️ עריכת קטגוריות</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">
+      קטגוריות אלו מגיעות ממספרי ID של MAX. ערוך שם/אייקון — יישמר לצמיתות ויחול על כל העסקאות.
+    </p>
+    <div style="max-height:420px;overflow-y:auto" id="catsList"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeCatsModal()">סגור</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Recurring expenses modal ═════════════════════════════════════ -->
+<div class="overlay" id="recurringOverlay">
+  <div class="modal wide">
+    <h3>🔁 הוצאות קבועות</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px">
+      הוצאות קבועות נוצרות אוטומטית כל חודש כהוצאה ידנית. ניתן לעצור / להמשיך כל אחת.
+    </p>
+
+    <!-- list -->
+    <div id="recurringList" style="max-height:320px;overflow-y:auto;margin-bottom:16px"></div>
+
+    <!-- add form -->
+    <details id="recurringAddDetails" style="border:1px solid var(--border);border-radius:10px;padding:12px">
+      <summary style="cursor:pointer;font-size:13px;font-weight:600;list-style:none">＋ הוסף הוצאה קבועה</summary>
+      <div style="margin-top:12px">
+        <div class="form-row">
+          <div><label>שם / תיאור</label><input type="text" id="recMerchant" placeholder="שכ"ד / גן / מנוי…"></div>
+          <div><label>סכום (₪)</label><input type="number" id="recAmount" min="0" step="0.01" placeholder="0.00"></div>
+        </div>
+        <div class="form-row">
+          <div><label>יום בחודש</label><input type="number" id="recDay" min="1" max="31" value="1"></div>
+          <div><label>קטגוריה</label><select class="form-select" id="recCategory"></select></div>
+        </div>
+        <div class="form-row">
+          <div><label>מבצע עסקה</label><select class="form-select" id="recOwner"></select></div>
+          <div><label>תחילת תקופה (YYYY-MM)</label><input type="text" id="recStartYm" placeholder="2024-01"></div>
+        </div>
+        <div class="form-row">
+          <div><label>סיום תקופה (YYYY-MM, אופציונלי)</label><input type="text" id="recEndYm" placeholder="ריק = ללא סיום"></div>
+          <div><label>הערה</label><input type="text" id="recNote" placeholder="אופציונלי"></div>
+        </div>
+        <div id="recError" style="color:var(--accent3);font-size:12px;display:none;margin-bottom:8px"></div>
+        <button class="btn btn-success" onclick="submitRecurring()">שמור הוצאה קבועה</button>
+      </div>
+    </details>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeRecurringModal()">סגור</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Sync modal ════════════════════════════════════════════════════ -->
+<div class="overlay" id="syncOverlay">
+  <div class="modal">
+    <h3>🔄 סנכרון נתונים מ-MAX</h3>
+    <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+      <select class="month-select" id="syncMonths" style="flex:1">
+        <option value="1">חודש אחרון</option>
+        <option value="3">3 חודשים</option>
+        <option value="6" selected>6 חודשים</option>
+        <option value="12">שנה</option>
+        <option value="24">שנתיים</option>
+        <option value="36">3 שנים</option>
+        <option value="48">4 שנים</option>
+        <option value="60">5 שנים</option>
+      </select>
+      <select class="month-select" id="syncOwner" style="flex:1">
+        <option value="">כל החשבונות</option>
+      </select>
+      <button class="btn btn-primary" id="btnRunSync" onclick="runSync()">סנכרן</button>
+      <button class="btn btn-ghost" onclick="closeSyncModal()">סגור</button>
+    </div>
+    <div class="log-pre" id="syncLog">ממתין…</div>
+    <hr style="margin:16px 0;border-color:#333">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <label style="font-size:.85rem;color:#aaa">איפוס DB:</label>
+      <button class="btn" style="background:#c0392b;color:#fff" onclick="resetDB(false)">🗑️ איפוס מלא</button>
+      <button class="btn btn-ghost" onclick="resetDB(true)">🗑️ איפוס עסקאות (שמור קטגוריות)</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const COLORS = ['#6c63ff','#00d4aa','#ff6b8a','#ffa63e','#3eb8ff','#e563ff','#63ffd4','#ff9363','#63b4ff','#ffd463','#ff63a5','#63ffe0'];
+const MONTH_NAMES = ['','ינו','פבר','מרץ','אפר','מאי','יוני','יולי','אוג','ספט','אוק','נוב','דצ'];
+
+let allTxns = [];
+let allOwners = [];
+let allCategories = [];
+let charts = {};
+let sortCol = 'activity_date', sortDir = -1;
+let activePerson = '';
+let activeCatFilter = '';
+
+// ── init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  show('loadingView');
+  try {
+    const [txnsResp, ownersResp, catsResp] = await Promise.all([
+      fetch('/api/transactions'),
+      fetch('/api/owners'),
+      fetch('/api/categories'),
+    ]);
+    allTxns      = await txnsResp.json();
+    allOwners    = await ownersResp.json();
+    allCategories = await catsResp.json();
+
+    if (!allTxns.length) { show('emptyView'); return; }
+    show('mainView');
+    buildPersonTabs();
+    buildSyncOwnerSelect();
+    buildCategoryDropdowns();
+    bootstrap();
+  } catch(e) {
+    show('emptyView');
+    document.getElementById('emptyView').innerHTML += `<div style="color:var(--accent3);font-size:12px">${e.message}</div>`;
+  }
+}
+
+function show(id) {
+  ['loadingView','emptyView','mainView'].forEach(v =>
+    document.getElementById(v).style.display = v === id ? '' : 'none');
+}
+
+// ── person tabs ───────────────────────────────────────────────────────────────
+function buildPersonTabs() {
+  const tabs = [{ name: 'כולם', value: '' }, ...allOwners.map(o => ({ name: o.name, value: o.name }))];
+  document.getElementById('personTabs').innerHTML = tabs.map(t =>
+    `<button class="person-tab ${activePerson === t.value ? 'active' : ''}"
+             onclick="setPerson('${t.value}')">${t.name}</button>`
+  ).join('');
+}
+
+function setPerson(name) {
+  activePerson = name;
+  buildPersonTabs();
+  render();
+}
+
+function buildSyncOwnerSelect() {
+  const sel = document.getElementById('syncOwner');
+  sel.innerHTML = '<option value="">כל החשבונות</option>' +
+    allOwners.map(o => `<option value="${o.name}">${o.name}</option>`).join('');
+}
+
+function buildCategoryDropdowns() {
+  const opts = allCategories.map(c =>
+    `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
+  document.getElementById('addCategory').innerHTML = opts;
+  document.getElementById('fCat').innerHTML =
+    '<option value="">כל הקטגוריות</option>' +
+    allCategories.map(c => `<option value="${c.name}">${c.icon} ${c.name}</option>`).join('');
+}
+
+// ── bootstrap ─────────────────────────────────────────────────────────────────
+function bootstrap() {
+  // month select — default = current month
+  const months = [...new Set(allTxns.map(t => (t.activity_date||'').slice(0,7)).filter(Boolean))].sort().reverse();
+  const curMonth = new Date().toISOString().slice(0,7);
+
+  const gmSel = document.getElementById('globalMonth');
+  gmSel.innerHTML = '<option value="">כל הזמן</option>' +
+    months.map(m => `<option value="${m}">${fmtMonth(m)}</option>`).join('');
+  gmSel.value = months.includes(curMonth) ? curMonth : (months[0] || '');
+  gmSel.onchange = render;
+
+  // table filter dropdowns
+  const cards = [...new Set(allTxns.map(t => t.card_number).filter(Boolean))].sort();
+  const plans = [...new Set(allTxns.map(t => t.plan_name).filter(Boolean))].sort();
+  document.getElementById('fCard').innerHTML = '<option value="">כל הכרטיסים</option>' +
+    cards.map(c => `<option value="${c}">•••• ${c}</option>`).join('');
+  document.getElementById('fPlan').innerHTML = '<option value="">כל התוכניות</option>' +
+    plans.map(p => `<option value="${p}">${p}</option>`).join('');
+
+  ['fCat','fCard','fPlan','fText'].forEach(id =>
+    document.getElementById(id).addEventListener('input', renderTable));
+
+  // add-expense owner select
+  document.getElementById('addOwner').innerHTML =
+    allOwners.map(o => `<option value="${o.name}">${o.name}</option>`).join('');
+
+  // set today's date in add modal
+  document.getElementById('addDate').value = new Date().toISOString().slice(0,10);
+
+  render();
+}
+
+// ── filtered data ─────────────────────────────────────────────────────────────
+function getBase() {
+  const gm = document.getElementById('globalMonth').value;
+  return allTxns.filter(t => {
+    if (activePerson && t.account_owner !== activePerson) return false;
+    if (gm && !(t.activity_date||'').startsWith(gm)) return false;
+    return true;
+  });
+}
+
+function getFiltered() {
+  const base = getBase();
+  const fc = document.getElementById('fCat').value || activeCatFilter;
+  const fcard = document.getElementById('fCard').value;
+  const fp = document.getElementById('fPlan').value;
+  const ft = document.getElementById('fText').value.toLowerCase();
+  return base.filter(t => {
+    if (fc && t.category_name !== fc) return false;
+    if (fcard && t.card_number !== fcard) return false;
+    if (fp && t.plan_name !== fp) return false;
+    if (ft && !(t.merchant_name||'').toLowerCase().includes(ft)) return false;
+    return true;
+  });
+}
+
+// ── render ────────────────────────────────────────────────────────────────────
+function render() {
+  const txns = getBase();
+  // full history for this person (ignore month filter) — used for monthly average
+  const personAll = allTxns.filter(t => !activePerson || t.account_owner === activePerson);
+  renderKPIs(txns, personAll);
+  renderCategories(txns);
+  renderCharts(txns);
+  renderTable();
+
+  const dates = txns.map(t => t.activity_date).filter(Boolean).sort();
+  document.getElementById('headerMeta').textContent = dates.length
+    ? `${dates[0]} — ${dates[dates.length-1]} · ${txns.length} עסקאות`
+    : 'אין נתונים';
+}
+
+// ── KPIs ──────────────────────────────────────────────────────────────────────
+function renderKPIs(txns, personAll) {
+  const total  = sum(txns);
+  // monthly average: based on ALL months in the full history, not just the visible slice
+  const allMonths = [...new Set((personAll||txns).map(t => (t.activity_date||'').slice(0,7)).filter(Boolean))];
+  const avgM = allMonths.length ? sum(personAll||txns) / allMonths.length : 0;
+  const maxTxn = txns.reduce((m, t) => Math.max(m, t.amount||0), 0);
+  const top = topMerchant(txns);
+  document.getElementById('kpiGrid').innerHTML = `
+    <div class="kpi"><div class="label">סה"כ הוצאות</div><div class="value" style="color:var(--accent)">₪${fmt(total)}</div><div class="sub">${txns.length} עסקאות</div></div>
+    <div class="kpi"><div class="label">ממוצע חודשי</div><div class="value" style="color:var(--accent2)">₪${fmt(avgM)}</div><div class="sub">${allMonths.length} חודשים בהיסטוריה</div></div>
+    <div class="kpi"><div class="label">ממוצע לעסקה</div><div class="value" style="color:var(--accent4)">₪${fmt(total/(txns.length||1))}</div><div class="sub">מקסימום: ₪${fmt(maxTxn)}</div></div>
+    <div class="kpi"><div class="label">סוחר מוביל</div><div class="value" style="color:var(--accent3);font-size:15px;line-height:1.4">${top||'—'}</div><div class="sub">&nbsp;</div></div>
+  `;
+}
+
+// ── Categories ────────────────────────────────────────────────────────────────
+function renderCategories(txns) {
+  // Show last 4 months (or fewer) for the bar breakdown
+  const allMonths = [...new Set(allTxns.map(t=>(t.activity_date||'').slice(0,7)).filter(Boolean))].sort();
+  const gm = document.getElementById('globalMonth').value;
+  // If a specific month is selected, show that month + 3 prior; otherwise last 4
+  let barsMonths;
+  if (gm) {
+    const idx = allMonths.indexOf(gm);
+    barsMonths = allMonths.slice(Math.max(0, idx-3), idx+1);
+  } else {
+    barsMonths = allMonths.slice(-4);
+  }
+
+  const bycat = {};
+  txns.forEach(t => {
+    const k = t.category_name || 'אחר';
+    if (!bycat[k]) bycat[k] = { icon: t.category_icon||'📦', txns:[] };
+    bycat[k].txns.push(t);
+  });
+
+  const sorted = Object.values(bycat).sort((a,b) => sum(b.txns)-sum(a.txns));
+  const colorMap = {};
+  sorted.forEach((c,i) => colorMap[c.icon+c.txns[0]?.category_name] = COLORS[i%COLORS.length]);
+
+  document.getElementById('catGrid').innerHTML = sorted.map((cat, i) => {
+    const catName = cat.txns[0]?.category_name || 'אחר';
+    const total = sum(cat.txns);
+    const color = COLORS[i % COLORS.length];
+
+    // per-bar-month breakdown — relative to max month value in this category
+    const monthVals = barsMonths.map(m => sum(cat.txns.filter(t=>(t.activity_date||'').startsWith(m))));
+    const maxVal = Math.max(...monthVals, 1);
+
+    const monthRows = barsMonths.map((m, mi) => {
+      const v = monthVals[mi];
+      const pct = Math.round(v / maxVal * 100);
+      return `<div class="cat-month-row">
+        <span class="cat-month-label">${fmtMonth(m)}</span>
+        <div class="cat-month-bar-wrap"><div class="cat-month-bar" style="width:${pct}%;background:${color}"></div></div>
+        <span class="cat-month-val">${v > 0 ? '₪'+fmt(v) : '—'}</span>
+      </div>`;
+    }).join('');
+
+    return `<div class="cat-card ${activeCatFilter===catName?'active':''}" onclick="toggleCat('${catName.replace(/'/g,"\\'")}')">
+      <div class="cat-head">
+        <div class="cat-icon" style="background:${color}22">${cat.icon}</div>
+        <div><div class="cat-name">${catName}</div><div class="cat-count">${cat.txns.length} עסקאות</div></div>
+      </div>
+      <div class="cat-total" style="color:${color}">₪${fmt(total)}</div>
+      <div class="cat-months">${monthRows}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleCat(name) {
+  activeCatFilter = activeCatFilter === name ? '' : name;
+  const base = getBase();
+  renderCategories(base);
+  renderTable();
+}
+
+// ── Charts ────────────────────────────────────────────────────────────────────
+function renderCharts(txns) {
+  Object.values(charts).forEach(c => c.destroy());
+  charts = {};
+
+  const catTotals = {};
+  txns.forEach(t => {
+    const k = (t.category_icon||'') + ' ' + (t.category_name||'אחר');
+    catTotals[k] = (catTotals[k]||0) + (t.amount||0);
+  });
+  const sortedCat = Object.entries(catTotals).sort((a,b) => b[1]-a[1]);
+  const totalAll = sum(txns);
+
+  charts.pie = new Chart(document.getElementById('chartPie'), {
+    type: 'doughnut',
+    plugins: [ChartDataLabels],
+    data: {
+      labels: sortedCat.map(([k,v]) => `${k}  ₪${fmt(v)}`),
+      datasets: [{
+        data: sortedCat.map(([,v]) => v),
+        backgroundColor: COLORS.slice(0, sortedCat.length),
+        borderWidth: 2,
+        borderColor: '#0f1117',
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: { color: '#8b8fa3', font: { size: 11 }, padding: 10 }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => `₪${fmt(ctx.raw)}  (${(ctx.raw/totalAll*100).toFixed(1)}%)`
+          }
+        },
+        datalabels: {
+          formatter: (value) => {
+            const pct = (value / totalAll * 100);
+            return pct >= 4 ? pct.toFixed(1) + '%' : '';
+          },
+          color: '#fff',
+          font: { weight: 'bold', size: 12 },
+          textShadowBlur: 4,
+          textShadowColor: 'rgba(0,0,0,0.6)',
+        }
+      }
+    }
+  });
+}
+
+// ── Table ─────────────────────────────────────────────────────────────────────
+const COLS = [
+  {key:'activity_date', label:'תאריך חיוב', cls:''},
+  {key:'merchant_name', label:'סוחר',        cls:''},
+  {key:'amount',        label:'סכום ₪',      cls:''},
+  {key:'category_name', label:'קטגוריה',     cls:''},
+  {key:'note',          label:'הערה',         cls:'col-note'},
+  {key:'account_owner', label:'שם',           cls:'col-owner'},
+  {key:'source',        label:'מקור',         cls:'col-source'},
+  {key:'_delete',       label:'',             cls:'col-del'},
+];
+
+function renderTable() {
+  const txns = getFiltered();
+  txns.sort((a,b) => {
+    if (sortCol==='amount') return ((a.amount||0)-(b.amount||0))*sortDir;
+    return String(a[sortCol]||'').localeCompare(String(b[sortCol]||''),'he')*sortDir;
+  });
+
+  const cats = [...new Set(allTxns.map(t=>t.category_name))];
+
+  document.getElementById('tableHead').innerHTML = COLS.map(c =>
+    c.key==='_delete' ? `<th class="${c.cls}"></th>` :
+    `<th class="${c.cls}" onclick="sortBy('${c.key}')">${c.label}${sortCol===c.key?(sortDir>0?' ▲':' ▼'):''}</th>`
+  ).join('');
+
+  document.getElementById('tableBody').innerHTML = txns.map(t => {
+    const ci = cats.indexOf(t.category_name) % COLORS.length;
+    const color = COLORS[ci];
+    const isManual = t.source === 'manual';
+    const ownerColor = allOwners.findIndex(o=>o.name===t.account_owner) === 0 ? 'var(--accent)' : 'var(--accent2)';
+    const noteHtml = `<span class="note-cell ${t.note?'':'empty'}"
+      onclick="editNote(event,'${t.id}','${t.source}')"
+      title="לחץ להוספת/עריכת הערה">${escHtml(t.note||'')}</span>`;
+    return `<tr>
+      <td style="color:var(--text-muted)">${t.activity_date||'—'}</td>
+      <td style="font-weight:500">${escHtml(t.merchant_name||'—')}</td>
+      <td class="amount-cell">₪${fmt(t.amount)}</td>
+      <td><span class="badge" style="background:${color}22;color:${color};cursor:pointer;border:1px dashed ${color}55"
+        title="לחץ לשינוי קטגוריה" onclick="editCategory(event,this,'${t.id}','${t.source}')">
+        ${t.category_icon||''} ${t.category_name||'—'} <span style="opacity:.5;font-size:10px">✎</span></span></td>
+      <td class="col-note">${noteHtml}</td>
+      <td class="col-owner"><span class="owner-badge" style="background:${ownerColor}22;color:${ownerColor}">${t.account_owner||'—'}</span></td>
+      <td class="col-source"><span title="${t.recurring_id?'קבועה':isManual?'ידני':'MAX'}">${t.recurring_id?'🔁':isManual?'✏️':'💳'}</span></td>
+      <td class="col-del">${isManual ? `<button class="btn btn-danger" onclick="deleteManual(${t.id})">מחק</button>` : ''}</td>
+    </tr>`;
+  }).join('');
+
+  const filtTotal = txns.reduce((s,t)=>s+(t.amount||0),0);
+  document.getElementById('tableCount').textContent = `${txns.length} עסקאות`;
+  document.getElementById('tableTotal').textContent = `סה"כ: ₪${fmt(filtTotal)}`;
+}
+
+const escHtml = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+window.sortBy = col => {
+  if (sortCol===col) sortDir*=-1; else { sortCol=col; sortDir=-1; }
+  renderTable();
+};
+
+// ── inline category picker ────────────────────────────────────────────────────
+let _catPopup = null;
+
+window.editCategory = function(evt, badge, txnId, source) {
+  evt.stopPropagation();
+  // guard against stale reference
+  if (_catPopup && !document.body.contains(_catPopup)) _catPopup = null;
+  if (_catPopup) { _catPopup.remove(); _catPopup = null; return; }
+
+  // ── overlay backdrop ──
+  const backdrop = document.createElement('div');
+  backdrop.id = 'catBackdrop';
+  backdrop.style.cssText = `
+    position:fixed; inset:0; z-index:9998; background:rgba(0,0,0,.45);
+  `;
+  backdrop.onclick = _closeCatPopup;
+
+  // ── picker panel ── centered on screen ──
+  const popup = document.createElement('div');
+  popup.id = 'catPopup';
+  popup.style.cssText = `
+    position:fixed; z-index:9999; background:#1a1d27; border:1px solid #2a2e3d;
+    border-radius:14px; padding:8px 6px; box-shadow:0 12px 40px rgba(0,0,0,.7);
+    width:260px; max-height:70vh; overflow-y:auto;
+    top:50%; left:50%; transform:translate(-50%,-50%);
+  `;
+
+  const title = `<div style="padding:8px 12px 10px;font-size:12px;color:var(--text-muted);border-bottom:1px solid #2a2e3d;margin-bottom:4px">בחר קטגוריה</div>`;
+
+  popup.innerHTML = title + allCategories.map(c =>
+    `<div class="cat-pick-item" onclick="applyCategory('${txnId}','${source}',${c.id})"
+      style="padding:8px 14px;cursor:pointer;border-radius:8px;font-size:13px;display:flex;align-items:center;gap:10px">
+      <span>${c.icon}</span><span>${c.name}</span>
+    </div>`
+  ).join('');
+
+  document.body.appendChild(backdrop);
+  document.body.appendChild(popup);
+  _catPopup = popup;
+
+  popup.querySelectorAll('.cat-pick-item').forEach(el => {
+    el.onmouseenter = () => el.style.background = '#222636';
+    el.onmouseleave = () => el.style.background = '';
+  });
+};
+
+function _closeCatPopup() {
+  if (_catPopup) { _catPopup.remove(); _catPopup = null; }
+  const bd = document.getElementById('catBackdrop');
+  if (bd) bd.remove();
+}
+
+// ── inline note editor ────────────────────────────────────────────────────────
+window.editNote = function(evt, txnId, source) {
+  evt.stopPropagation();
+  const span = evt.currentTarget;
+  const current = span.textContent.trim();
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'note-input';
+  input.value = current;
+  input.placeholder = 'הוסף הערה…';
+  span.replaceWith(input);
+  input.focus();
+
+  const save = async () => {
+    const note = input.value.trim();
+    try {
+      await fetch(`/api/transaction/${txnId}/note`, {
+        method:'PATCH', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ note, source })
+      });
+      // update in memory
+      const t = allTxns.find(t => String(t.id) === String(txnId));
+      if (t) t.note = note;
+    } catch(e) { /* silent */ }
+    renderTable();
+  };
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', e => { if (e.key==='Enter') input.blur(); if (e.key==='Escape') { input.blur(); } });
+};
+
+// ── categories modal ──────────────────────────────────────────────────────────
+function openCatsModal() {
+  const list = document.getElementById('catsList');
+  list.innerHTML = allCategories.map(c => `
+    <div class="cat-row" id="catrow-${c.id}">
+      <input class="cat-icon-input" value="${escHtml(c.icon)}" id="cicon-${c.id}" title="אייקון">
+      <input class="cat-name-input" value="${escHtml(c.name)}" id="cname-${c.id}"
+        placeholder="שם קטגוריה" onkeydown="if(event.key==='Enter') saveCat(${c.id})">
+      <button class="btn btn-primary" style="padding:4px 8px;font-size:12px" onclick="saveCat(${c.id})">שמור</button>
+    </div>`).join('');
+  document.getElementById('catsOverlay').classList.add('visible');
+}
+
+function closeCatsModal() {
+  document.getElementById('catsOverlay').classList.remove('visible');
+}
+
+window.saveCat = async function(catId) {
+  const name = document.getElementById(`cname-${catId}`).value.trim();
+  const icon = document.getElementById(`cicon-${catId}`).value.trim();
+  if (!name) return;
+  try {
+    await fetch(`/api/categories/${catId}`, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ name, icon })
+    });
+    // update local cache
+    const cat = allCategories.find(c => c.id === catId);
+    if (cat) { cat.name = name; cat.icon = icon; }
+    // flash saved
+    const btn = document.querySelector(`#catrow-${catId} .btn-primary`);
+    if (btn) { btn.textContent = '✓'; btn.style.background='#00a37a'; setTimeout(()=>{ btn.textContent='שמור'; btn.style.background=''; }, 1200); }
+    // rebuild category dropdowns & re-render
+    buildCategoryDropdowns();
+    await reloadData();
+  } catch(e) { alert('שגיאה: ' + e.message); }
+};
+
+window.applyCategory = async function(txnId, source, catId) {
+  _closeCatPopup();
+  try {
+    const resp = await fetch(`/api/transaction/${txnId}/category`, {
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ category_id: catId, source })
+    });
+    const data = await resp.json();
+    if (data.ok) await reloadData();
+  } catch(e) { alert('שגיאה: ' + e.message); }
+};
+
+// ── recurring expenses ────────────────────────────────────────────────────────
+let allRecurring = [];
+
+async function openRecurringModal() {
+  allRecurring = await fetch('/api/recurring').then(r => r.json());
+  renderRecurringList();
+  // pre-fill owner/category selects
+  const curYm = new Date().toISOString().slice(0, 7);
+  document.getElementById('recStartYm').value = curYm;
+  document.getElementById('recOwner').innerHTML =
+    allOwners.map(o => `<option value="${o.name}">${o.name}</option>`).join('');
+  document.getElementById('recCategory').innerHTML =
+    allCategories.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
+  document.getElementById('recurringOverlay').classList.add('visible');
+}
+function closeRecurringModal() {
+  document.getElementById('recurringOverlay').classList.remove('visible');
+}
+
+function renderRecurringList() {
+  const el = document.getElementById('recurringList');
+  if (!allRecurring.length) {
+    el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px 0">אין הוצאות קבועות מוגדרות</div>';
+    return;
+  }
+  el.innerHTML = allRecurring.map(r => {
+    const cat = allCategories.find(c => c.id === r.category_id) || {icon:'📦', name:'אחר'};
+    const active = r.active === 1;
+    return `<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;
+              padding:10px 0;border-bottom:1px solid var(--border)">
+      <div>
+        <div style="font-weight:600;font-size:13px">${escHtml(r.merchant_name)} <span style="color:var(--text-muted);font-weight:400">· יום ${r.day_of_month}</span></div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px">
+          ₪${fmt(r.amount)} · ${cat.icon} ${cat.name} · ${r.account_owner||'—'}
+          ${r.start_ym ? '· מ-' + r.start_ym : ''} ${r.end_ym ? 'עד ' + r.end_ym : ''}
+        </div>
+      </div>
+      <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px"
+        onclick="toggleRecurring(${r.id}, ${active ? 0 : 1})">${active ? '⏸ עצור' : '▶ המשך'}</button>
+      <button class="btn btn-danger" style="font-size:11px;padding:4px 10px"
+        onclick="deleteRecurring(${r.id})">מחק</button>
+    </div>`;
+  }).join('');
+}
+
+async function toggleRecurring(id, active) {
+  await fetch(`/api/recurring/${id}`, {
+    method: 'PATCH', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({active})
+  });
+  allRecurring = await fetch('/api/recurring').then(r => r.json());
+  renderRecurringList();
+  await reloadData();
+}
+
+async function deleteRecurring(id) {
+  if (!confirm('למחוק הוצאה קבועה זו? כל הרשומות שנוצרו ממנה יימחקו גם כן.')) return;
+  await fetch(`/api/recurring/${id}`, {method: 'DELETE'});
+  allRecurring = await fetch('/api/recurring').then(r => r.json());
+  renderRecurringList();
+  await reloadData();
+}
+
+async function submitRecurring() {
+  const merchant = document.getElementById('recMerchant').value.trim();
+  const amount   = parseFloat(document.getElementById('recAmount').value);
+  const day      = parseInt(document.getElementById('recDay').value);
+  const catId    = parseInt(document.getElementById('recCategory').value);
+  const owner    = document.getElementById('recOwner').value;
+  const startYm  = document.getElementById('recStartYm').value.trim();
+  const endYm    = document.getElementById('recEndYm').value.trim();
+  const note     = document.getElementById('recNote').value.trim();
+  const errEl    = document.getElementById('recError');
+
+  if (!merchant || isNaN(amount) || !startYm) {
+    errEl.textContent = 'נא למלא שם, סכום ותאריך התחלה';
+    errEl.style.display = 'block';
+    return;
+  }
+  errEl.style.display = 'none';
+
+  const resp = await fetch('/api/recurring', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({merchant_name: merchant, amount, category_id: catId,
+      account_owner: owner, note, day_of_month: day, start_ym: startYm, end_ym: endYm})
+  });
+  const data = await resp.json();
+  if (data.ok) {
+    document.getElementById('recMerchant').value = '';
+    document.getElementById('recAmount').value   = '';
+    document.getElementById('recNote').value     = '';
+    document.getElementById('recurringAddDetails').removeAttribute('open');
+    allRecurring = await fetch('/api/recurring').then(r => r.json());
+    renderRecurringList();
+    await reloadData();
+  } else {
+    errEl.textContent = data.error || 'שגיאה';
+    errEl.style.display = 'block';
+  }
+}
+
+// ── manual expense ────────────────────────────────────────────────────────────
+function openAddModal() {
+  document.getElementById('addError').style.display = 'none';
+  document.getElementById('addDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('addAmount').value = '';
+  document.getElementById('addMerchant').value = '';
+  document.getElementById('addNote').value = '';
+  document.getElementById('addOverlay').classList.add('visible');
+}
+function closeAddModal() { document.getElementById('addOverlay').classList.remove('visible'); }
+
+async function submitAdd() {
+  const date     = document.getElementById('addDate').value;
+  const amount   = parseFloat(document.getElementById('addAmount').value);
+  const merchant = document.getElementById('addMerchant').value.trim();
+  const catId    = parseInt(document.getElementById('addCategory').value);
+  const owner    = document.getElementById('addOwner').value;
+  const source   = document.getElementById('addSource').value;
+  const note     = document.getElementById('addNote').value.trim();
+
+  const errEl = document.getElementById('addError');
+  if (!date || !amount || !merchant) {
+    errEl.textContent = 'יש למלא תאריך, סכום ושם סוחר'; errEl.style.display='';
+    return;
+  }
+
+  const btn = document.getElementById('addSubmitBtn');
+  btn.disabled = true;
+
+  try {
+    const resp = await fetch('/api/manual', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ activity_date:date, merchant_name:`${merchant} (${source})`, amount, category_id:catId, account_owner:owner, note })
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error);
+    closeAddModal();
+    await reloadData();
+  } catch(e) {
+    errEl.textContent = 'שגיאה: ' + e.message; errEl.style.display='';
+  }
+  btn.disabled = false;
+}
+
+async function deleteManual(id) {
+  if (!confirm('למחוק את ההוצאה הזו?')) return;
+  await fetch(`/api/manual/${id}`, { method:'DELETE' });
+  await reloadData();
+}
+
+async function reloadData() {
+  allTxns = await fetch('/api/transactions').then(r=>r.json());
+  render();
+}
+
+// ── sync modal ────────────────────────────────────────────────────────────────
+function openSyncModal() {
+  document.getElementById('syncLog').textContent = 'ממתין…';
+  document.getElementById('syncOverlay').classList.add('visible');
+}
+function closeSyncModal() { document.getElementById('syncOverlay').classList.remove('visible'); }
+
+async function runSync() {
+  const months = document.getElementById('syncMonths').value;
+  const owner  = document.getElementById('syncOwner').value;
+  const btn = document.getElementById('btnRunSync');
+  btn.disabled = true; btn.textContent = 'מסנכרן…';
+  document.getElementById('syncLog').textContent = 'מתחבר ל-MAX…';
+  try {
+    const resp = await fetch('/api/sync', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ months:parseInt(months), owner })
+    });
+    const data = await resp.json();
+    document.getElementById('syncLog').textContent = data.log || 'הסתיים';
+    if (data.ok) setTimeout(() => { closeSyncModal(); reloadData(); }, 1500);
+  } catch(e) {
+    document.getElementById('syncLog').textContent = 'שגיאה: ' + e.message;
+  }
+  btn.disabled = false; btn.textContent = 'סנכרן';
+}
+
+async function resetDB(keepCategories) {
+  const msg = keepCategories
+    ? 'למחוק את כל העסקאות (ולשמור קטגוריות)?'
+    : 'למחוק את כל העסקאות והקטגוריות? (הקטגוריות יחזרו לברירת המחדל)';
+  if (!confirm(msg)) return;
+  try {
+    const resp = await fetch('/api/reset', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ keep_categories: keepCategories })
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      document.getElementById('syncLog').textContent = keepCategories
+        ? 'עסקאות נמחקו. קטגוריות נשמרו.'
+        : 'DB אופס. קטגוריות חזרו לברירת המחדל.';
+      await reloadData();
+      if (!keepCategories) allCategories = await fetch('/api/categories').then(r=>r.json());
+      render();
+    }
+  } catch(e) {
+    document.getElementById('syncLog').textContent = 'שגיאה: ' + e.message;
+  }
+}
+
+// ── kebab menu ────────────────────────────────────────────────────────────────
+function toggleKebab(evt) {
+  evt.stopPropagation();
+  document.getElementById('kebabMenu').classList.toggle('open');
+  setTimeout(() => document.addEventListener('click', closeKebab, { once:true }), 0);
+}
+function closeKebab() {
+  document.getElementById('kebabMenu').classList.remove('open');
+}
+
+// ── export ────────────────────────────────────────────────────────────────────
+function exportCSV() {
+  const txns = getFiltered();
+  const h = ['תאריך חיוב','סוחר','סכום','מטבע','קטגוריה','שם','תוכנית','מקור','הערה'];
+  const rows = txns.map(t => [
+    t.activity_date, `"${(t.merchant_name||'').replace(/"/g,'""')}"`,
+    t.amount, t.currency||'ILS', t.category_name, t.account_owner,
+    t.plan_name, t.source, `"${(t.note||'').replace(/"/g,'""')}"`
+  ]);
+  const csv = '\uFEFF' + [h,...rows].map(r=>r.join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download = `max_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+// ── utils ─────────────────────────────────────────────────────────────────────
+const fmt = n => (n||0).toLocaleString('he-IL',{minimumFractionDigits:0,maximumFractionDigits:2});
+const sum = (arr, key='amount') => arr.reduce((s,t)=>s+(t[key]||0),0);
+const median = arr => { if(!arr.length) return 0; const s=[...arr].sort((a,b)=>a-b); const m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
+const topMerchant = txns => { const m={}; txns.forEach(t=>{m[t.merchant_name||'?']=(m[t.merchant_name||'?']||0)+(t.amount||0);}); return Object.entries(m).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—'; };
+const fmtMonth = m => { if(!m) return ''; const [y,mo]=m.split('-'); return `${MONTH_NAMES[parseInt(mo)]} ${y.slice(2)}`; };
+
+init();
+</script>
+</body>
+</html>
