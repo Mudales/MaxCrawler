@@ -53,6 +53,12 @@ def main():
 
     total_fetched = total_inserted = 0
 
+    end_month = today.month + 1
+    end_year = today.year
+    if end_month > 12:
+        end_month = 1
+        end_year += 1
+
     for account in accounts:
         logger.info("=== Syncing account: %s ===", account.owner)
         crawler = MaxCrawler(cfg, account)
@@ -63,7 +69,7 @@ def main():
                 except ValueError:
                     logger.error("--from must be YYYY-MM format")
                     sys.exit(1)
-                txns = crawler.fetch_range(sy, sm, today.year, today.month)
+                txns = crawler.fetch_range(sy, sm, end_year, end_month)
             else:
                 txns = crawler.fetch_last_n_months(args.months)
         except AuthError as e:
