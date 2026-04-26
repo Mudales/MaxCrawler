@@ -304,9 +304,13 @@ class MaxCrawler:
 
     def fetch_last_n_months(self, n: int = 6) -> list[dict]:
         today = date.today()
-        end_year, end_month = today.year, today.month
-        start_month = end_month - n + 1
-        start_year = end_year
+        end_month = today.month + 1
+        end_year = today.year
+        if end_month > 12:
+            end_month = 1
+            end_year += 1
+        start_month = today.month - n + 1
+        start_year = today.year
         while start_month <= 0:
             start_month += 12
             start_year -= 1

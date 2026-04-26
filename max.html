@@ -408,7 +408,7 @@ let allTxns = [];
 let allOwners = [];
 let allCategories = [];
 let charts = {};
-let sortCol = 'activity_date', sortDir = -1;
+let sortCol = 'purchase_date', sortDir = -1;
 let activePerson = '';
 let activeCatFilter = '';
 
@@ -678,7 +678,7 @@ function renderCharts(txns) {
 
 // ── Table ─────────────────────────────────────────────────────────────────────
 const COLS = [
-  {key:'activity_date', label:'תאריך חיוב', cls:''},
+  {key:'purchase_date', label:'תאריך עסקה', cls:''},
   {key:'merchant_name', label:'סוחר',        cls:''},
   {key:'amount',        label:'סכום ₪',      cls:''},
   {key:'category_name', label:'קטגוריה',     cls:''},
@@ -711,7 +711,7 @@ function renderTable() {
       onclick="editNote(event,'${t.id}','${t.source}')"
       title="לחץ להוספת/עריכת הערה">${escHtml(t.note||'')}</span>`;
     return `<tr>
-      <td style="color:var(--text-muted)">${t.activity_date||'—'}</td>
+      <td style="color:var(--text-muted)">${t.purchase_date || t.activity_date||'—'}</td>
       <td style="font-weight:500">${escHtml(t.merchant_name||'—')}</td>
       <td class="amount-cell">₪${fmt(t.amount)}</td>
       <td><span class="badge" style="background:${color}22;color:${color};cursor:pointer;border:1px dashed ${color}55"
@@ -1091,9 +1091,9 @@ function closeKebab() {
 // ── export ────────────────────────────────────────────────────────────────────
 function exportCSV() {
   const txns = getFiltered();
-  const h = ['תאריך חיוב','סוחר','סכום','מטבע','קטגוריה','שם','תוכנית','מקור','הערה'];
+  const h = ['תאריך עסקה','תאריך חיוב','סוחר','סכום','מטבע','קטגוריה','שם','תוכנית','מקור','הערה'];
   const rows = txns.map(t => [
-    t.activity_date, `"${(t.merchant_name||'').replace(/"/g,'""')}"`,
+    t.purchase_date || t.activity_date, t.activity_date, `"${(t.merchant_name||'').replace(/"/g,'""')}"`,
     t.amount, t.currency||'ILS', t.category_name, t.account_owner,
     t.plan_name, t.source, `"${(t.note||'').replace(/"/g,'""')}"`
   ]);
