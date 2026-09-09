@@ -8,8 +8,6 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>MAX — דשבורד חיובי אשראי</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <style>
   /* Desktop-only visual up-scale. Never on touch — `zoom` there breaks fixed
      positioning, hit targets and iOS viewport math. Expressed as opt-out
@@ -195,6 +193,40 @@
   /* responsive table column hiding */
   .col-note, .col-owner, .col-source, .col-del { }
 
+  /* ── category ranking (replaces the doughnut) ─────────────────────────────
+     Ranked horizontal bars: length carries magnitude, so color carries nothing
+     and every bar is the one accent (a value-ramp over nominal categories would
+     double-encode length as hue). Single series => no legend. Real text instead
+     of a canvas, so it is readable by screen readers and never clips a label. */
+  .rank-head { display:flex; align-items:flex-end; justify-content:space-between; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+  .rank-total { font-size:23px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--text); }
+  .rank-meta { font-size:11px; color:var(--text-muted); margin-top:2px; }
+  .rank-hint { font-size:11px; color:var(--text-muted); opacity:.75; }
+  .rank-list { display:flex; flex-direction:column; gap:2px; }
+  /* --namew is measured in JS from the longest label and set on .rank-list, so
+     every row shares it: the bars then all start at the same x, which is what
+     makes their lengths comparable. */
+  .rank-row {
+    display:grid; grid-template-columns:var(--namew,minmax(76px,28%)) 1fr max-content;
+    align-items:center; gap:10px; padding:6px; border-radius:8px; cursor:pointer;
+  }
+  .rank-row.active { background:#1e2035; }
+  /* On a wide screen an unbounded track drags the value far from the bar tip. */
+  @media (min-width:801px) {
+    .rank-row { grid-template-columns:var(--namew,180px) minmax(0,520px) max-content; }
+  }
+  .rank-name { display:flex; align-items:center; gap:7px; min-width:0; font-size:12.5px; }
+  .rank-name .n { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rank-track { background:var(--border); border-radius:2px; height:8px; }
+  .rank-bar {
+    height:8px; background:var(--accent);
+    border-start-end-radius:4px; border-end-end-radius:4px;  /* round the tip, square at the baseline */
+    transition:width .45s ease-out;
+  }
+  .rank-row.active .rank-bar { background:#b3aeff; }
+  .rank-val { font-size:12px; font-variant-numeric:tabular-nums; white-space:nowrap; text-align:left; }
+  .rank-pct { font-size:11px; color:var(--text-muted); font-variant-numeric:tabular-nums; }
+
   /* ── transaction cards (replaces the table on narrow screens) ───────────── */
   .txn-list { display:none; flex-direction:column; gap:8px; }
   .txn-card {
@@ -376,7 +408,14 @@
 
   <div class="section-title">חלוקה לפי קטגוריה</div>
   <div class="chart-card">
-    <canvas id="chartPie" style="max-height:420px"></canvas>
+    <div class="rank-head">
+      <div>
+        <div class="rank-total" id="rankTotal">—</div>
+        <div class="rank-meta" id="rankMeta"></div>
+      </div>
+      <div class="rank-hint">לחץ על קטגוריה לסינון</div>
+    </div>
+    <div class="rank-list" id="rankList"></div>
   </div>
 
   <div class="section-title">עסקאות</div>
@@ -549,7 +588,6 @@ const MONTH_NAMES = ['','ינו','פבר','מרץ','אפר','מאי','יוני',
 let allTxns = [];
 let allOwners = [];
 let allCategories = [];
-let charts = {};
 let sortCol = 'purchase_date', sortDir = -1;
 let activePerson = '';
 let activeCatFilter = '';
@@ -649,6 +687,14 @@ function bootstrap() {
   // Swap table <-> cards when crossing the breakpoint (rotation, desktop resize).
   MOBILE_MQ.addEventListener('change', () => { if (allTxns.length) renderTable(); });
 
+  // The label column is measured in px, so it has to be re-fitted when the
+  // available width changes (rotation, desktop window resize).
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(sizeRankNameColumn, 150);
+  });
+
   // add-expense owner select
   document.getElementById('addOwner').innerHTML =
     allOwners.map(o => `<option value="${o.name}">${o.name}</option>`).join('');
@@ -691,7 +737,7 @@ function render() {
   const personAll = allTxns.filter(t => !activePerson || t.account_owner === activePerson);
   renderKPIs(txns, personAll);
   renderCategories(txns);
-  renderCharts(txns);
+  renderCategoryRanking(txns);
   renderTable();
 
   const dates = txns.map(t => t.activity_date).filter(Boolean).sort();
@@ -775,59 +821,61 @@ function toggleCat(name) {
   activeCatFilter = activeCatFilter === name ? '' : name;
   const base = getBase();
   renderCategories(base);
+  renderCategoryRanking(base);
   renderTable();
 }
 
-// ── Charts ────────────────────────────────────────────────────────────────────
-function renderCharts(txns) {
-  Object.values(charts).forEach(c => c.destroy());
-  charts = {};
-
-  const catTotals = {};
+// ── Category ranking ─────────────────────────────────────────────────────────
+// Ranked bars, sorted by spend. Bar length is the magnitude channel; every bar
+// wears the single accent (nominal categories have no order to ramp over).
+function renderCategoryRanking(txns) {
+  const byCat = {};
   txns.forEach(t => {
-    const k = (t.category_icon||'') + ' ' + (t.category_name||'אחר');
-    catTotals[k] = (catTotals[k]||0) + (t.amount||0);
+    const name = t.category_name || 'אחר';
+    if (!byCat[name]) byCat[name] = { name, icon: t.category_icon || '📦', total: 0, count: 0 };
+    byCat[name].total += (t.amount || 0);
+    byCat[name].count++;
   });
-  const sortedCat = Object.entries(catTotals).sort((a,b) => b[1]-a[1]);
-  const totalAll = sum(txns);
 
-  charts.pie = new Chart(document.getElementById('chartPie'), {
-    type: 'doughnut',
-    plugins: [ChartDataLabels],
-    data: {
-      labels: sortedCat.map(([k,v]) => `${k}  ₪${fmt(v)}`),
-      datasets: [{
-        data: sortedCat.map(([,v]) => v),
-        backgroundColor: COLORS.slice(0, sortedCat.length),
-        borderWidth: 2,
-        borderColor: '#0f1117',
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: {
-          position: 'right',
-          labels: { color: '#8b8fa3', font: { size: 11 }, padding: 10 }
-        },
-        tooltip: {
-          callbacks: {
-            label: ctx => `₪${fmt(ctx.raw)}  (${(ctx.raw/totalAll*100).toFixed(1)}%)`
-          }
-        },
-        datalabels: {
-          formatter: (value) => {
-            const pct = (value / totalAll * 100);
-            return pct >= 4 ? pct.toFixed(1) + '%' : '';
-          },
-          color: '#fff',
-          font: { weight: 'bold', size: 12 },
-          textShadowBlur: 4,
-          textShadowColor: 'rgba(0,0,0,0.6)',
-        }
-      }
-    }
-  });
+  const rows  = Object.values(byCat).sort((a, b) => b.total - a.total);
+  const total = rows.reduce((s, r) => s + r.total, 0);
+  const max   = rows.length ? rows[0].total : 0;
+
+  document.getElementById('rankTotal').textContent = `₪${fmt(total)}`;
+  document.getElementById('rankMeta').textContent  =
+    rows.length ? `${rows.length} קטגוריות · ${txns.length} עסקאות` : '';
+
+  document.getElementById('rankList').innerHTML = rows.map(r => {
+    const pct    = total ? r.total / total * 100 : 0;
+    // Scale to the largest category so the ranking uses the full track width;
+    // floor it so a tiny category still shows a visible mark.
+    const len    = max ? Math.max(r.total / max * 100, 1.5) : 0;
+    const active = activeCatFilter === r.name;
+    // Name goes through data-cat, not into the onclick string — category names
+    // are user-editable and a quote in one would break the attribute.
+    return `<div class="rank-row ${active ? 'active' : ''}"
+        data-cat="${escHtml(r.name)}" onclick="toggleCat(this.dataset.cat)"
+        title="${escHtml(r.name)} · ₪${fmt(r.total)} · ${pct.toFixed(1)}% · ${r.count} עסקאות">
+      <div class="rank-name"><span>${r.icon}</span><span class="n">${escHtml(r.name)}</span></div>
+      <div class="rank-track"><div class="rank-bar" style="width:${len}%"></div></div>
+      <div class="rank-val">₪${fmt0(r.total)}${pct >= 5 ? `<span class="rank-pct"> ${pct.toFixed(0)}%</span>` : ''}</div>
+    </div>`;
+  }).join('');
+
+  sizeRankNameColumn();
+}
+
+// Fit the label column to the longest category name, so no name is ellipsised
+// (clipped Hebrew labels were the doughnut legend's worst trait). Measured with
+// the column free, then pinned to one shared width — capped, with the CSS
+// ellipsis left as the fallback for a pathologically long rename.
+function sizeRankNameColumn() {
+  const list = document.getElementById('rankList');
+  if (!list.children.length) return;
+  list.style.setProperty('--namew', 'max-content');
+  const need = Math.max(0, ...[...list.querySelectorAll('.rank-name')].map(n => n.offsetWidth));
+  const cap  = Math.round(list.clientWidth * 0.45);
+  list.style.setProperty('--namew', Math.min(Math.ceil(need) + 2, cap) + 'px');
 }
 
 // ── Table ─────────────────────────────────────────────────────────────────────
@@ -1307,6 +1355,7 @@ function exportCSV() {
 
 // ── utils ─────────────────────────────────────────────────────────────────────
 const fmt = n => (n||0).toLocaleString('he-IL',{minimumFractionDigits:0,maximumFractionDigits:2});
+const fmt0 = n => Math.round(n||0).toLocaleString('he-IL');
 const sum = (arr, key='amount') => arr.reduce((s,t)=>s+(t[key]||0),0);
 const median = arr => { if(!arr.length) return 0; const s=[...arr].sort((a,b)=>a-b); const m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
 const topMerchant = txns => { const m={}; txns.forEach(t=>{m[t.merchant_name||'?']=(m[t.merchant_name||'?']||0)+(t.amount||0);}); return Object.entries(m).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—'; };
