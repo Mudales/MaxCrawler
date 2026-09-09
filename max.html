@@ -2,12 +2,21 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0f1117">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>MAX — דשבורד חיובי אשראי</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <style>
-  html { zoom: 1.25; }
+  /* Desktop-only visual up-scale. Never on touch — `zoom` there breaks fixed
+     positioning, hit targets and iOS viewport math. Expressed as opt-out
+     (coarse pointer cancels it) rather than opt-in on `pointer:fine`, so a
+     browser that reports no pointer at all still gets the desktop scale. */
+  @media (min-width:1024px) { html { zoom: 1.25; } }
+  @media (pointer:coarse)   { html { zoom: 1; } }
   :root {
     --bg: #0f1117; --card: #1a1d27; --card-hover: #222636;
     --border: #2a2e3d; --text: #e4e6ed; --text-muted: #8b8fa3;
@@ -15,19 +24,34 @@
     --accent4: #ffa63e; --accent5: #3eb8ff;
   }
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:'Segoe UI',Tahoma,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; direction:rtl; }
+  body {
+    font-family:'Segoe UI',Tahoma,sans-serif; background:var(--bg); color:var(--text);
+    min-height:100vh; direction:rtl;
+    -webkit-text-size-adjust:100%;          /* stop iOS reflowing text on rotate */
+    -webkit-tap-highlight-color:transparent;
+    overscroll-behavior-y:contain;          /* no rubber-band chaining into the page */
+  }
+  /* Anything interactive should feel instant on touch, never text-selected. */
+  button, .person-tab, .cat-card, .kpi, th, .txn-card { -webkit-user-select:none; user-select:none; }
 
-  /* header */
+  /* header — wraps to two lines on narrow screens (controls drop below the title) */
   .header {
     background:linear-gradient(135deg,#1a1d27,#252a3a);
     border-bottom:1px solid var(--border);
     padding:16px 28px;
+    padding-top:calc(16px + env(safe-area-inset-top));
+    padding-right:calc(28px + env(safe-area-inset-right));
+    padding-left:calc(28px + env(safe-area-inset-left));
     display:flex; align-items:center; justify-content:space-between;
     flex-wrap:wrap; gap:10px; position:sticky; top:0; z-index:50;
   }
   .header h1 { font-size:20px; font-weight:700; background:linear-gradient(135deg,var(--accent),var(--accent5)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
-  .header-meta { color:var(--text-muted); font-size:11px; margin-top:2px; }
-  .header-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  /* basis:0 so the (nowrap, ellipsised) meta line can't force the actions to wrap */
+  .header-title { flex:1 1 0; min-width:0; }
+  .header-meta { color:var(--text-muted); font-size:11px; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .header-controls { display:flex; align-items:center; gap:8px; min-width:0; }
+  .header-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  .title-short { display:none; }
 
   /* person filter */
   .person-tabs { display:flex; gap:4px; }
@@ -36,7 +60,6 @@
     background:transparent; color:var(--text-muted); font-size:12px;
     font-family:inherit; cursor:pointer; transition:all .2s;
   }
-  .person-tab:hover { border-color:var(--accent); color:var(--text); }
   .person-tab.active { background:var(--accent); border-color:var(--accent); color:#fff; }
 
   /* month select */
@@ -172,47 +195,158 @@
   /* responsive table column hiding */
   .col-note, .col-owner, .col-source, .col-del { }
 
-  @media(max-width:800px) {
-    html { zoom:1; }
+  /* ── transaction cards (replaces the table on narrow screens) ───────────── */
+  .txn-list { display:none; flex-direction:column; gap:8px; }
+  .txn-card {
+    background:var(--bg); border:1px solid var(--border); border-radius:12px;
+    padding:12px 14px; display:flex; flex-direction:column; gap:9px;
+  }
+  .txn-card-top { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+  .txn-merchant { font-size:14px; font-weight:600; line-height:1.35; overflow-wrap:anywhere; }
+  .txn-amount { font-size:17px; font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; flex-shrink:0; }
+  .txn-meta { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:11px; color:var(--text-muted); }
+  .txn-meta .badge { font-size:11px; padding:5px 10px; }
+  .txn-note-row { display:flex; align-items:center; gap:10px; border-top:1px dashed var(--border); padding-top:8px; }
+  .txn-card .note-cell { font-size:12px; }
+  .txn-note-row .note-cell { flex:1; }
+  /* Empty notes ride along in the meta row — a dedicated row per card wasted
+     ~45px of screen on every one of them. Icon-only so the row never wraps. */
+  .note-chip { flex:0 0 auto; min-width:0; padding:5px 9px; border:1px dashed var(--border); border-radius:20px; font-size:12px; line-height:1; }
+  .note-chip.empty::before { content:'📝'; opacity:.55; }
+  .txn-del { flex-shrink:0; margin-inline-start:auto; }
+  .mobile-only { display:none; }
+
+  /* ── mobile ═══════════════════════════════════════════════════════════════ */
+  @media (max-width:900px) {
+    /* controls drop to their own line under the title */
+    .header-controls { order:3; flex-basis:100%; }
+  }
+
+  @media (max-width:800px) {
     .charts-grid { grid-template-columns:1fr; }
     .cat-grid { grid-template-columns:1fr 1fr; }
-    .kpi-grid { grid-template-columns:repeat(2,1fr); }
-    .main { padding:12px; }
-    .header { padding:10px 12px; gap:8px; }
-    .header-actions { gap:6px; }
+    .kpi-grid { grid-template-columns:repeat(2,1fr); gap:10px; }
+    .main {
+      padding:14px;
+      padding-right:calc(14px + env(safe-area-inset-right));
+      padding-left:calc(14px + env(safe-area-inset-left));
+      padding-bottom:calc(40px + env(safe-area-inset-bottom));
+    }
+    .header { padding:10px 14px; padding-top:calc(10px + env(safe-area-inset-top)); gap:9px; }
+    .header h1 { font-size:17px; }
+    .title-long { display:none; }
+    .title-short { display:inline; }
     .form-row { grid-template-columns:1fr; }
-    .filters { gap:6px; }
-    .filters select, .filters input[type=text] { font-size:11px; }
-    .table-wrap { max-height:380px; }
-    td, th { padding:7px 7px; }
-    .col-note, .col-source { display:none; }
+
+    /* Touch targets: 44px minimum on everything tappable. */
+    .btn { padding:11px 16px; font-size:14px; min-height:44px; }
+    .btn-danger { font-size:12px; padding:8px 12px; min-height:36px; }
+    .btn-add { padding:11px 14px; }
+    .kebab-btn { min-width:44px; justify-content:center; padding:11px 12px; }
+    .kebab-dropdown button { padding:13px 14px; font-size:14px; }
+    .person-tab { padding:10px 16px; font-size:13px; min-height:40px; }
+    .month-select { padding:10px 12px; min-height:40px; }
+
+    /* 16px is the threshold below which iOS Safari zooms the page on focus. */
+    input[type=text], input[type=number], input[type=date], select, textarea,
+    .filters select, .filters input[type=text], .note-input, .cat-name-input {
+      font-size:16px;
+    }
+    input[type=text], input[type=number], input[type=date], select.form-select, textarea { padding:11px 12px; }
+
+    /* Cards instead of a horizontally-cramped table; page scrolls, not a nested box. */
+    .table-wrap { display:none; }
+    .txn-list { display:flex; }
+    .table-card { padding:14px; }
+    .table-footer { font-size:12px; }
+
+    /* Filters become a single swipeable strip. */
+    .filters {
+      flex-wrap:nowrap; overflow-x:auto; gap:8px; padding-bottom:4px;
+      scrollbar-width:none; -webkit-overflow-scrolling:touch;
+    }
+    .filters::-webkit-scrollbar { display:none; }
+    .filters select, .filters input[type=text] { flex:0 0 auto; padding:9px 12px; }
+    .filters input[type=text] { width:190px; }
+    .mobile-only { display:block; }
+
+    .section-title { margin-top:20px; }
+    .chart-card canvas { max-height:300px; }
+
+    /* Modals become bottom sheets — thumb-reachable, and they never overflow
+       the viewport now that the keyboard can push them. */
+    .overlay { align-items:flex-end; }
+    .modal {
+      width:100%; max-width:100%;
+      border-radius:18px 18px 0 0; border-bottom:none;
+      padding:20px 16px calc(20px + env(safe-area-inset-bottom));
+      max-height:92vh; max-height:92dvh; overflow-y:auto; -webkit-overflow-scrolling:touch;
+      animation:sheet-up .22s ease-out;
+    }
+    .modal.wide { width:100%; }
+    .modal h3 { font-size:17px; }
+    .modal-footer {
+      position:sticky; bottom:0; background:var(--card);
+      padding-top:12px; margin-top:14px; gap:10px;
+    }
+    .modal-footer .btn { flex:1; justify-content:center; }
+    /* Grab handle, so the sheet reads as a sheet. */
+    .modal::before {
+      content:''; display:block; width:40px; height:4px; border-radius:2px;
+      background:var(--border); margin:-6px auto 14px;
+    }
   }
-  @media(max-width:540px) {
+  @keyframes sheet-up { from { transform:translateY(100%); } to { transform:translateY(0); } }
+
+  @media (max-width:540px) {
     .kpi-grid { grid-template-columns:1fr 1fr; }
     .cat-grid { grid-template-columns:1fr; }
-    .col-owner { display:none; }
-    .person-tabs { max-width:55vw; overflow-x:auto; flex-wrap:nowrap; }
-    .person-tab  { white-space:nowrap; }
-    .month-select { max-width:110px; font-size:12px; }
+    .person-tabs { flex:1; overflow-x:auto; flex-wrap:nowrap; scrollbar-width:none; }
+    .person-tabs::-webkit-scrollbar { display:none; }
+    .person-tab { white-space:nowrap; }
+    .month-select { flex-shrink:0; max-width:44vw; }
   }
-  @media(max-width:400px) {
-    .kpi-grid { grid-template-columns:1fr; }
+  @media (max-width:400px) {
+    .kpi .value { font-size:21px; }
+  }
+
+  /* ── pointer-aware states ─────────────────────────────────────────────────
+     On touch, :hover latches after a tap and leaves cards lifted/highlighted. */
+  @media (hover:hover) {
+    .person-tab:hover { border-color:var(--accent); color:var(--text); }
+  }
+  @media (hover:none) {
+    .kpi:hover { transform:none; }
+    .cat-card:hover { transform:none; }
+    .cat-card:not(.active):hover { border-color:var(--border); }
+    tr:hover td { background:transparent; }
+    th:hover { color:var(--text-muted); }
+    .note-cell:hover { color:var(--text-muted); }
+  }
+  /* Tap feedback that actually fires on touch. */
+  .btn:active, .person-tab:active { transform:scale(.97); }
+  .cat-card:active, .txn-card:active { background:var(--card-hover); }
+
+  @media (prefers-reduced-motion:reduce) {
+    *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; }
   }
 </style>
 </head>
 <body>
 
-<div class="header">
-  <div>
-    <h1>💳 MAX — דשבורד חיובי אשראי</h1>
+<header class="header">
+  <div class="header-title">
+    <h1>💳 <span class="title-long">MAX — דשבורד חיובי אשראי</span><span class="title-short">MAX</span></h1>
     <div class="header-meta" id="headerMeta">טוען…</div>
   </div>
-  <div class="header-actions">
+  <div class="header-controls">
     <div class="person-tabs" id="personTabs"></div>
-    <select class="month-select" id="globalMonth"></select>
-    <button class="btn btn-success" onclick="openAddModal()">＋ הוסף הוצאה</button>
+    <select class="month-select" id="globalMonth" aria-label="חודש"></select>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-success btn-add" onclick="openAddModal()">＋<span class="btn-add-label"> הוסף הוצאה</span></button>
     <div class="kebab-wrap">
-      <button class="btn btn-ghost kebab-btn" onclick="toggleKebab(event)" title="פעולות נוספות">⋮</button>
+      <button class="btn btn-ghost kebab-btn" onclick="toggleKebab(event)" title="פעולות נוספות" aria-label="פעולות נוספות">⋮</button>
       <div class="kebab-dropdown" id="kebabMenu">
         <button onclick="openSyncModal();closeKebab()">🔄 סנכרן</button>
         <button onclick="openRecurringModal();closeKebab()">🔁 הוצאות קבועות</button>
@@ -223,7 +357,7 @@
       </div>
     </div>
   </div>
-</div>
+</header>
 
 <div class="state-view" id="loadingView"><div class="spinner"></div><div>טוען נתונים…</div></div>
 <div class="state-view" id="emptyView" style="display:none">
@@ -251,11 +385,19 @@
       <select id="fCat"><option value="">כל הקטגוריות</option></select>
       <select id="fCard"><option value="">כל הכרטיסים</option></select>
       <select id="fPlan"><option value="">כל התוכניות</option></select>
-      <input type="text" id="fText" placeholder="🔍 חיפוש סוחר…">
+      <input type="text" id="fText" placeholder="🔍 חיפוש סוחר…" inputmode="search" autocomplete="off">
+      <select id="fSort" class="mobile-only" aria-label="מיון">
+        <option value="purchase_date:-1">↓ תאריך (חדש)</option>
+        <option value="purchase_date:1">↑ תאריך (ישן)</option>
+        <option value="amount:-1">↓ סכום (גבוה)</option>
+        <option value="amount:1">↑ סכום (נמוך)</option>
+        <option value="merchant_name:1">א־ת סוחר</option>
+      </select>
     </div>
     <div class="table-wrap">
       <table><thead><tr id="tableHead"></tr></thead><tbody id="tableBody"></tbody></table>
     </div>
+    <div class="txn-list" id="txnList"></div>
     <div class="table-footer"><span id="tableCount"></span><span id="tableTotal"></span></div>
   </div>
 </div>
@@ -495,6 +637,18 @@ function bootstrap() {
   ['fCat','fCard','fPlan','fText'].forEach(id =>
     document.getElementById(id).addEventListener('input', renderTable));
 
+  // Mobile sort control — the table's sortable headers aren't reachable there.
+  const sortSel = document.getElementById('fSort');
+  sortSel.value = `${sortCol}:${sortDir}`;
+  sortSel.addEventListener('change', () => {
+    const [col, dir] = sortSel.value.split(':');
+    sortCol = col; sortDir = parseInt(dir);
+    renderTable();
+  });
+
+  // Swap table <-> cards when crossing the breakpoint (rotation, desktop resize).
+  MOBILE_MQ.addEventListener('change', () => { if (allTxns.length) renderTable(); });
+
   // add-expense owner select
   document.getElementById('addOwner').innerHTML =
     allOwners.map(o => `<option value="${o.name}">${o.name}</option>`).join('');
@@ -688,6 +842,11 @@ const COLS = [
   {key:'_delete',       label:'',             cls:'col-del'},
 ];
 
+// Narrow screens get a card list instead of the table — same data, same actions,
+// but readable without horizontal cramming. Only one of the two is ever in the DOM.
+const MOBILE_MQ = window.matchMedia('(max-width:800px)');
+const isMobileView = () => MOBILE_MQ.matches;
+
 function renderTable() {
   const txns = getFiltered();
   txns.sort((a,b) => {
@@ -695,6 +854,52 @@ function renderTable() {
     return String(a[sortCol]||'').localeCompare(String(b[sortCol]||''),'he')*sortDir;
   });
 
+  if (isMobileView()) {
+    document.getElementById('tableBody').innerHTML = '';
+    renderTxnCards(txns);
+  } else {
+    document.getElementById('txnList').innerHTML = '';
+    renderTxnTable(txns);
+  }
+
+  const filtTotal = txns.reduce((s,t)=>s+(t.amount||0),0);
+  document.getElementById('tableCount').textContent = `${txns.length} עסקאות`;
+  document.getElementById('tableTotal').textContent = `סה"כ: ₪${fmt(filtTotal)}`;
+}
+
+function renderTxnCards(txns) {
+  const cats = [...new Set(allTxns.map(t=>t.category_name))];
+  document.getElementById('txnList').innerHTML = txns.map(t => {
+    const color = COLORS[cats.indexOf(t.category_name) % COLORS.length];
+    const isManual = t.source === 'manual';
+    const ownerColor = allOwners.findIndex(o=>o.name===t.account_owner) === 0 ? 'var(--accent)' : 'var(--accent2)';
+    const srcIcon  = t.recurring_id ? '🔁' : isManual ? '✏️' : '💳';
+    const srcTitle = t.recurring_id ? 'קבועה' : isManual ? 'ידני' : 'MAX';
+    return `<div class="txn-card">
+      <div class="txn-card-top">
+        <div class="txn-merchant">${escHtml(t.merchant_name||'—')}</div>
+        <div class="txn-amount" style="color:${color}">₪${fmt(t.amount)}</div>
+      </div>
+      <div class="txn-meta">
+        <span class="badge" style="background:${color}22;color:${color};border:1px dashed ${color}55"
+          title="לחץ לשינוי קטגוריה" onclick="editCategory(event,this,'${t.id}','${t.source}')">
+          ${t.category_icon||''} ${escHtml(t.category_name||'—')} <span style="opacity:.5;font-size:10px">✎</span></span>
+        <span>${fmtDateShort(t.purchase_date || t.activity_date)}</span>
+        <span class="owner-badge" style="background:${ownerColor}22;color:${ownerColor}">${escHtml(t.account_owner||'—')}</span>
+        <span title="${srcTitle}">${srcIcon}</span>
+        ${t.note ? '' : `<span class="note-cell note-chip empty"
+          onclick="editNote(event,'${t.id}','${t.source}')" title="הוסף הערה"></span>`}
+        ${isManual ? `<button class="btn btn-danger txn-del" onclick="deleteManual(${t.id})">מחק</button>` : ''}
+      </div>
+      ${t.note ? `<div class="txn-note-row">
+        <span class="note-cell" onclick="editNote(event,'${t.id}','${t.source}')"
+          title="לחץ לעריכת הערה">${escHtml(t.note)}</span>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderTxnTable(txns) {
   const cats = [...new Set(allTxns.map(t=>t.category_name))];
 
   document.getElementById('tableHead').innerHTML = COLS.map(c =>
@@ -723,10 +928,6 @@ function renderTable() {
       <td class="col-del">${isManual ? `<button class="btn btn-danger" onclick="deleteManual(${t.id})">מחק</button>` : ''}</td>
     </tr>`;
   }).join('');
-
-  const filtTotal = txns.reduce((s,t)=>s+(t.amount||0),0);
-  document.getElementById('tableCount').textContent = `${txns.length} עסקאות`;
-  document.getElementById('tableTotal').textContent = `סה"כ: ₪${fmt(filtTotal)}`;
 }
 
 const escHtml = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -1110,6 +1311,28 @@ const sum = (arr, key='amount') => arr.reduce((s,t)=>s+(t[key]||0),0);
 const median = arr => { if(!arr.length) return 0; const s=[...arr].sort((a,b)=>a-b); const m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
 const topMerchant = txns => { const m={}; txns.forEach(t=>{m[t.merchant_name||'?']=(m[t.merchant_name||'?']||0)+(t.amount||0);}); return Object.entries(m).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—'; };
 const fmtMonth = m => { if(!m) return ''; const [y,mo]=m.split('-'); return `${MONTH_NAMES[parseInt(mo)]} ${y.slice(2)}`; };
+// DD/MM for the current year, DD/MM/YY otherwise — keeps the card meta row on one line.
+const fmtDateShort = d => {
+  const p = String(d||'').split('-');
+  if (p.length !== 3) return d || '—';
+  const thisYear = String(new Date().getFullYear());
+  return p[0] === thisYear ? `${p[2]}/${p[1]}` : `${p[2]}/${p[1]}/${p[0].slice(2)}`;
+};
+
+// ── sheet ergonomics ─────────────────────────────────────────────────────────
+// Tap the backdrop or press Escape to dismiss; lock the page behind an open
+// sheet so the background doesn't scroll under the thumb.
+document.querySelectorAll('.overlay').forEach(ov => {
+  ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('visible'); });
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const open = document.querySelector('.overlay.visible');
+  if (open) open.classList.remove('visible');
+});
+new MutationObserver(() => {
+  document.body.style.overflow = document.querySelector('.overlay.visible') ? 'hidden' : '';
+}).observe(document.body, { attributes:true, attributeFilter:['class'], subtree:true });
 
 init();
 </script>

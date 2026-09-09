@@ -5,6 +5,7 @@ services:
       - "5000:5000"
     volumes:
       - ./transactions.db:/app/transactions.db
+      - ./max.html:/app/max.html
       - ./.env:/app/.env
       - ./.sessions:/app/.sessions
     restart: unless-stopped
