@@ -102,15 +102,32 @@
   .cat-card.active { border-color:var(--accent); background:#1e2035; }
   .cat-head { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
   .cat-icon { font-size:20px; width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-  .cat-name { font-size:13px; font-weight:600; }
+  .cat-head-text { min-width:0; }
+  .cat-name { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .cat-count { font-size:11px; color:var(--text-muted); margin-top:1px; }
-  .cat-total { font-size:20px; font-weight:700; margin-bottom:8px; }
-  .cat-months { display:flex; flex-direction:column; gap:3px; }
-  .cat-month-row { display:flex; align-items:center; gap:6px; font-size:11px; }
-  .cat-month-label { color:var(--text-muted); width:36px; flex-shrink:0; }
-  .cat-month-bar-wrap { flex:1; background:var(--border); border-radius:3px; height:4px; }
-  .cat-month-bar { height:4px; border-radius:3px; transition:width .4s; }
-  .cat-month-val { color:var(--text-muted); width:58px; text-align:left; flex-shrink:0; }
+  .cat-figure { display:flex; align-items:baseline; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+  .cat-total { font-size:21px; font-weight:700; font-variant-numeric:tabular-nums; }
+
+  /* Month-over-month chip. Arrow glyph + number, so the meaning survives
+     without colour; up is a rise in spend, hence the warm hue. */
+  .cat-delta { font-size:11px; font-weight:600; padding:3px 8px; border-radius:20px; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .cat-delta.up   { color:var(--accent3); background:#ff6b8a1a; }
+  .cat-delta.down { color:var(--accent2); background:#00d4aa1a; }
+  .cat-delta.flat { color:var(--text-muted); background:#8b8fa31a; }
+
+  /* 6-month column strip — current month in the category hue, history recessive.
+     Rounded cap, square at the baseline; the band's leftover stays as air. */
+  .cat-spark { display:flex; align-items:flex-end; gap:4px; height:52px; margin-top:13px; }
+  .spark-col { flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; gap:4px; height:100%; }
+  /* Hairline baseline, so a zero-spend month shows nothing at all rather than a
+     sliver that could be misread as a small amount. */
+  .spark-track { flex:1; width:100%; display:flex; align-items:flex-end; justify-content:center; border-bottom:1px solid var(--border); }
+  /* Capped thickness — a bar that fills its slot reads as a block, not a column.
+     History months use a gray that still clears 3:1 on the card; --border (1.25:1)
+     is chrome-weight and vanished. */
+  .spark-bar { width:100%; max-width:22px; background:#666e8c; border-radius:4px 4px 0 0; transition:height .4s ease-out; }
+  .spark-lbl { font-size:9px; line-height:1; color:var(--text-muted); white-space:nowrap; }
+  .spark-lbl.cur { color:var(--text); font-weight:600; }
 
   /* charts */
   .charts-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
@@ -583,6 +600,7 @@
 
 <script>
 const COLORS = ['#6c63ff','#00d4aa','#ff6b8a','#ffa63e','#3eb8ff','#e563ff','#63ffd4','#ff9363','#63b4ff','#ffd463','#ff63a5','#63ffe0'];
+const MONTHS_IN_STRIP = 6;
 const MONTH_NAMES = ['','ינו','פבר','מרץ','אפר','מאי','יוני','יולי','אוג','ספט','אוק','נוב','דצ'];
 
 let allTxns = [];
@@ -715,6 +733,10 @@ function getBase() {
   });
 }
 
+// Person filter only — no month filter. The category strip and the monthly
+// average both need history the month selector hasn't cut away.
+const getPersonAll = () => allTxns.filter(t => !activePerson || t.account_owner === activePerson);
+
 function getFiltered() {
   const base = getBase();
   const fc = document.getElementById('fCat').value || activeCatFilter;
@@ -734,7 +756,7 @@ function getFiltered() {
 function render() {
   const txns = getBase();
   // full history for this person (ignore month filter) — used for monthly average
-  const personAll = allTxns.filter(t => !activePerson || t.account_owner === activePerson);
+  const personAll = getPersonAll();
   renderKPIs(txns, personAll);
   renderCategories(txns);
   renderCategoryRanking(txns);
@@ -764,57 +786,93 @@ function renderKPIs(txns, personAll) {
 
 // ── Categories ────────────────────────────────────────────────────────────────
 function renderCategories(txns) {
-  // Show last 4 months (or fewer) for the bar breakdown
-  const allMonths = [...new Set(allTxns.map(t=>(t.activity_date||'').slice(0,7)).filter(Boolean))].sort();
+  // The month strip has to come from the person's FULL history — `txns` is
+  // already narrowed to the selected month, which is why the earlier months
+  // used to render as "—" no matter what.
+  const personAll = getPersonAll();
+  const allMonths = [...new Set(personAll.map(t => (t.activity_date||'').slice(0,7)).filter(Boolean))].sort();
   const gm = document.getElementById('globalMonth').value;
-  // If a specific month is selected, show that month + 3 prior; otherwise last 4
-  let barsMonths;
-  if (gm) {
-    const idx = allMonths.indexOf(gm);
-    barsMonths = allMonths.slice(Math.max(0, idx-3), idx+1);
-  } else {
-    barsMonths = allMonths.slice(-4);
-  }
+  const endIdx = gm ? allMonths.indexOf(gm) : allMonths.length - 1;
+  const stripMonths = allMonths.slice(Math.max(0, endIdx - MONTHS_IN_STRIP + 1), endIdx + 1);
 
+  // headline figure: the visible slice
   const bycat = {};
   txns.forEach(t => {
     const k = t.category_name || 'אחר';
-    if (!bycat[k]) bycat[k] = { icon: t.category_icon||'📦', txns:[] };
+    if (!bycat[k]) bycat[k] = { name:k, icon: t.category_icon || '📦', txns: [] };
     bycat[k].txns.push(t);
   });
 
-  const sorted = Object.values(bycat).sort((a,b) => sum(b.txns)-sum(a.txns));
-  const colorMap = {};
-  sorted.forEach((c,i) => colorMap[c.icon+c.txns[0]?.category_name] = COLORS[i%COLORS.length]);
+  // month-by-month history per category, independent of the month filter
+  const hist = {};
+  personAll.forEach(t => {
+    const m = (t.activity_date||'').slice(0,7);
+    if (!m) return;
+    const k = t.category_name || 'אחר';
+    (hist[k] = hist[k] || {})[m] = (hist[k][m] || 0) + (t.amount || 0);
+  });
+
+  const sorted = Object.values(bycat).sort((a,b) => sum(b.txns) - sum(a.txns));
 
   document.getElementById('catGrid').innerHTML = sorted.map((cat, i) => {
-    const catName = cat.txns[0]?.category_name || 'אחר';
     const total = sum(cat.txns);
     const color = COLORS[i % COLORS.length];
+    const h     = hist[cat.name] || {};
+    const vals  = stripMonths.map(m => h[m] || 0);
+    const maxV  = Math.max(...vals, 1);
 
-    // per-bar-month breakdown — relative to max month value in this category
-    const monthVals = barsMonths.map(m => sum(cat.txns.filter(t=>(t.activity_date||'').startsWith(m))));
-    const maxVal = Math.max(...monthVals, 1);
-
-    const monthRows = barsMonths.map((m, mi) => {
-      const v = monthVals[mi];
-      const pct = Math.round(v / maxVal * 100);
-      return `<div class="cat-month-row">
-        <span class="cat-month-label">${fmtMonth(m)}</span>
-        <div class="cat-month-bar-wrap"><div class="cat-month-bar" style="width:${pct}%;background:${color}"></div></div>
-        <span class="cat-month-val">${v > 0 ? '₪'+fmt(v) : '—'}</span>
+    // Columns: current month in the category colour, the rest recessive.
+    const cols = stripMonths.map((m, mi) => {
+      const v = vals[mi];
+      const isCur = mi === vals.length - 1;
+      // floor a nonzero month at 6% so a small spend is still a visible mark
+      const pct = v > 0 ? Math.max(v / maxV * 100, 6) : 0;
+      return `<div class="spark-col" title="${fmtMonth(m)} · ${v > 0 ? '₪'+fmt(v) : 'ללא הוצאה'}">
+        <div class="spark-track"><div class="spark-bar${isCur ? ' cur' : ''}"
+          style="height:${pct}%${isCur ? ';background:'+color : ''}"></div></div>
+        <div class="spark-lbl${isCur ? ' cur' : ''}">${MONTH_NAMES[parseInt(m.slice(5,7))]}</div>
       </div>`;
     }).join('');
 
-    return `<div class="cat-card ${activeCatFilter===catName?'active':''}" onclick="toggleCat('${catName.replace(/'/g,"\\'")}')">
+    return `<div class="cat-card ${activeCatFilter===cat.name ? 'active' : ''}"
+        data-cat="${escHtml(cat.name)}" onclick="toggleCat(this.dataset.cat)">
       <div class="cat-head">
         <div class="cat-icon" style="background:${color}22">${cat.icon}</div>
-        <div><div class="cat-name">${catName}</div><div class="cat-count">${cat.txns.length} עסקאות</div></div>
+        <div class="cat-head-text">
+          <div class="cat-name">${escHtml(cat.name)}</div>
+          <div class="cat-count">${cat.txns.length} עסקאות</div>
+        </div>
       </div>
-      <div class="cat-total" style="color:${color}">₪${fmt(total)}</div>
-      <div class="cat-months">${monthRows}</div>
+      <div class="cat-figure">
+        <div class="cat-total" style="color:${color}">₪${fmt0(total)}</div>
+        ${deltaChip(vals, gm, total, stripMonths)}
+      </div>
+      <div class="cat-spark">${cols}</div>
     </div>`;
   }).join('');
+}
+
+// A month-over-month chip when one month is in view; a monthly average when the
+// headline covers all time (a delta against a lifetime total would mislead).
+// Arrow + text carry the meaning, so it never rests on colour alone.
+function deltaChip(vals, gm, total, stripMonths) {
+  if (!gm) {
+    const months = stripMonths.length || 1;
+    return `<div class="cat-delta flat" title="ממוצע ל-${months} החודשים האחרונים">⌀ ₪${fmt0(vals.reduce((a,b)=>a+b,0)/months)}/חודש</div>`;
+  }
+  if (vals.length < 2) return '';
+  const cur = vals[vals.length-1], prev = vals[vals.length-2];
+  const prevLabel = fmtMonth(stripMonths[stripMonths.length-2]);
+  if (prev === 0) {
+    return cur > 0
+      ? `<div class="cat-delta up" title="לא הייתה הוצאה ב-${prevLabel}">חדש החודש</div>`
+      : '';
+  }
+  const pct = (cur - prev) / prev * 100;
+  if (Math.abs(pct) < 1) return `<div class="cat-delta flat" title="ללא שינוי מ-${prevLabel}">≈ ללא שינוי</div>`;
+  const up = pct > 0;
+  return `<div class="cat-delta ${up ? 'up' : 'down'}"
+    title="${prevLabel}: ₪${fmt(prev)} → ₪${fmt(cur)}">${up ? '↑' : '↓'} ${Math.abs(pct).toFixed(0)}%</div>`;
 }
 
 function toggleCat(name) {
