@@ -210,6 +210,29 @@
   /* responsive table column hiding */
   .col-note, .col-owner, .col-source, .col-del { }
 
+  /* ── search ───────────────────────────────────────────────────────────────── */
+  .search-wrap { position:relative; margin-bottom:10px; }
+  .search-wrap input {
+    width:100%; background:var(--bg); border:1px solid var(--border); color:var(--text);
+    padding:10px 12px; padding-inline-end:40px; border-radius:10px;
+    font-size:14px; font-family:inherit;
+  }
+  .search-wrap input:focus { outline:none; border-color:var(--accent); }
+  .search-clear {
+    position:absolute; inset-inline-end:6px; top:50%; transform:translateY(-50%);
+    width:30px; height:30px; display:flex; align-items:center; justify-content:center;
+    border:none; border-radius:50%; cursor:pointer;
+    background:var(--card-hover); color:var(--text-muted); font-size:12px; line-height:1;
+  }
+  .search-summary {
+    display:flex; flex-wrap:wrap; gap:5px 14px; align-items:baseline;
+    background:#1e2035; border:1px solid var(--border); border-radius:10px;
+    padding:9px 12px; margin-bottom:10px; font-size:12px;
+  }
+  .search-summary b { font-size:15px; font-variant-numeric:tabular-nums; color:var(--accent5); }
+  .search-summary .scope { color:var(--text-muted); font-size:11px; }
+  mark { background:#6c63ff55; color:var(--text); border-radius:3px; padding:0 2px; }
+
   /* ── category ranking (replaces the doughnut) ─────────────────────────────
      Ranked horizontal bars: length carries magnitude, so color carries nothing
      and every bar is the one accent (a value-ramp over nominal categories would
@@ -437,11 +460,16 @@
 
   <div class="section-title">עסקאות</div>
   <div class="table-card">
+    <div class="search-wrap">
+      <input type="text" id="fText" placeholder="🔍 חיפוש סוחר, הערה, קטגוריה, סכום…"
+             inputmode="search" autocomplete="off" enterkeyhint="search" aria-label="חיפוש">
+      <button class="search-clear" id="fClear" type="button" aria-label="נקה חיפוש" hidden>✕</button>
+    </div>
+    <div class="search-summary" id="searchSummary" hidden></div>
     <div class="filters">
       <select id="fCat"><option value="">כל הקטגוריות</option></select>
       <select id="fCard"><option value="">כל הכרטיסים</option></select>
       <select id="fPlan"><option value="">כל התוכניות</option></select>
-      <input type="text" id="fText" placeholder="🔍 חיפוש סוחר…" inputmode="search" autocomplete="off">
       <select id="fSort" class="mobile-only" aria-label="מיון">
         <option value="purchase_date:-1">↓ תאריך (חדש)</option>
         <option value="purchase_date:1">↑ תאריך (ישן)</option>
@@ -690,8 +718,24 @@ function bootstrap() {
   document.getElementById('fPlan').innerHTML = '<option value="">כל התוכניות</option>' +
     plans.map(p => `<option value="${p}">${p}</option>`).join('');
 
-  ['fCat','fCard','fPlan','fText'].forEach(id =>
+  ['fCat','fCard','fPlan'].forEach(id =>
     document.getElementById(id).addEventListener('input', renderTable));
+
+  // Debounced: a keystroke can re-filter and re-render every row.
+  const searchEl = document.getElementById('fText');
+  let searchTimer;
+  searchEl.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(renderTable, 140);
+  });
+  searchEl.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { searchEl.value = ''; renderTable(); }
+  });
+  document.getElementById('fClear').addEventListener('click', () => {
+    searchEl.value = '';
+    renderTable();
+    searchEl.focus();
+  });
 
   // Mobile sort control — the table's sortable headers aren't reachable there.
   const sortSel = document.getElementById('fSort');
@@ -738,16 +782,19 @@ function getBase() {
 const getPersonAll = () => allTxns.filter(t => !activePerson || t.account_owner === activePerson);
 
 function getFiltered() {
-  const base = getBase();
+  const toks = searchTokens();
+  // A query searches the person's whole history. Scoped to the selected month
+  // (the old behaviour) a match from March was invisible while September was
+  // showing, which made the box feel broken.
+  const base = toks.length ? getPersonAll() : getBase();
   const fc = document.getElementById('fCat').value || activeCatFilter;
   const fcard = document.getElementById('fCard').value;
   const fp = document.getElementById('fPlan').value;
-  const ft = document.getElementById('fText').value.toLowerCase();
   return base.filter(t => {
     if (fc && t.category_name !== fc) return false;
     if (fcard && t.card_number !== fcard) return false;
     if (fp && t.plan_name !== fp) return false;
-    if (ft && !(t.merchant_name||'').toLowerCase().includes(ft)) return false;
+    for (const tok of toks) if (!matchesToken(t, tok)) return false;
     return true;
   });
 }
@@ -936,6 +983,64 @@ function sizeRankNameColumn() {
   list.style.setProperty('--namew', Math.min(Math.ceil(need) + 2, cap) + 'px');
 }
 
+// ── search ───────────────────────────────────────────────────────────────────
+// Tokens are AND-ed and matched across merchant, note, category, owner, card,
+// plan, date and amount. A `>50` / `<50` token compares the amount instead.
+function searchTokens() {
+  return document.getElementById('fText').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+}
+
+// The haystack is cached per row — rebuilding it for ~2500 rows on every
+// keystroke was the expensive part. Invalidated wherever a field it covers
+// is edited in place.
+function searchHaystack(t) {
+  if (t._hay === undefined) {
+    t._hay = [t.merchant_name, t.note, t.category_name, t.account_owner,
+              t.card_number, t.plan_name, t.purchase_date, t.activity_date, t.amount]
+      .filter(v => v !== null && v !== undefined && v !== '')
+      .join(' ').toLowerCase();
+  }
+  return t._hay;
+}
+
+function matchesToken(t, tok) {
+  const cmp = tok.match(/^([<>])(\d+(?:\.\d+)?)$/);
+  if (cmp) {
+    const v = t.amount || 0, n = parseFloat(cmp[2]);
+    return cmp[1] === '>' ? v > n : v < n;
+  }
+  return searchHaystack(t).includes(tok);
+}
+
+// Escape first, then wrap hits in one pass — a per-token pass would start
+// matching the "mark" it had just inserted.
+function mark(text, toks) {
+  const s = escHtml(text || '');
+  const words = toks.filter(t => !/^[<>]/.test(t));
+  if (!words.length) return s;
+  const re = new RegExp('(' + words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')', 'gi');
+  return s.replace(re, '<mark>$1</mark>');
+}
+
+function renderSearchSummary(txns, toks) {
+  const el = document.getElementById('searchSummary');
+  document.getElementById('fClear').hidden = !toks.length;
+  if (!toks.length) { el.hidden = true; return; }
+  el.hidden = false;
+  if (!txns.length) {
+    el.innerHTML = '<span>לא נמצאו תוצאות</span><span class="scope">החיפוש חל על כל ההיסטוריה</span>';
+    return;
+  }
+  const total  = txns.reduce((s, t) => s + (t.amount || 0), 0);
+  const dates  = txns.map(t => t.activity_date).filter(Boolean).sort();
+  const months = new Set(txns.map(t => (t.activity_date || '').slice(0, 7)).filter(Boolean)).size;
+  el.innerHTML = `
+    <span><b>₪${fmt0(total)}</b> ב-${txns.length} עסקאות</span>
+    <span>ממוצע ₪${fmt0(total / txns.length)}</span>
+    ${months > 1 ? `<span>${months} חודשים · ₪${fmt0(total / months)} לחודש</span>` : ''}
+    <span class="scope">${fmtMonth(dates[0].slice(0,7))} – ${fmtMonth(dates[dates.length-1].slice(0,7))} · כל ההיסטוריה</span>`;
+}
+
 // ── Table ─────────────────────────────────────────────────────────────────────
 const COLS = [
   {key:'purchase_date', label:'תאריך עסקה', cls:''},
@@ -960,12 +1065,15 @@ function renderTable() {
     return String(a[sortCol]||'').localeCompare(String(b[sortCol]||''),'he')*sortDir;
   });
 
+  const toks = searchTokens();
+  renderSearchSummary(txns, toks);
+
   if (isMobileView()) {
     document.getElementById('tableBody').innerHTML = '';
-    renderTxnCards(txns);
+    renderTxnCards(txns, toks);
   } else {
     document.getElementById('txnList').innerHTML = '';
-    renderTxnTable(txns);
+    renderTxnTable(txns, toks);
   }
 
   const filtTotal = txns.reduce((s,t)=>s+(t.amount||0),0);
@@ -973,7 +1081,7 @@ function renderTable() {
   document.getElementById('tableTotal').textContent = `סה"כ: ₪${fmt(filtTotal)}`;
 }
 
-function renderTxnCards(txns) {
+function renderTxnCards(txns, toks = []) {
   const cats = [...new Set(allTxns.map(t=>t.category_name))];
   document.getElementById('txnList').innerHTML = txns.map(t => {
     const color = COLORS[cats.indexOf(t.category_name) % COLORS.length];
@@ -983,13 +1091,13 @@ function renderTxnCards(txns) {
     const srcTitle = t.recurring_id ? 'קבועה' : isManual ? 'ידני' : 'MAX';
     return `<div class="txn-card">
       <div class="txn-card-top">
-        <div class="txn-merchant">${escHtml(t.merchant_name||'—')}</div>
+        <div class="txn-merchant">${mark(t.merchant_name||'—', toks)}</div>
         <div class="txn-amount" style="color:${color}">₪${fmt(t.amount)}</div>
       </div>
       <div class="txn-meta">
         <span class="badge" style="background:${color}22;color:${color};border:1px dashed ${color}55"
           title="לחץ לשינוי קטגוריה" onclick="editCategory(event,this,'${t.id}','${t.source}')">
-          ${t.category_icon||''} ${escHtml(t.category_name||'—')} <span style="opacity:.5;font-size:10px">✎</span></span>
+          ${t.category_icon||''} ${mark(t.category_name||'—', toks)} <span style="opacity:.5;font-size:10px">✎</span></span>
         <span>${fmtDateShort(t.purchase_date || t.activity_date)}</span>
         <span class="owner-badge" style="background:${ownerColor}22;color:${ownerColor}">${escHtml(t.account_owner||'—')}</span>
         <span title="${srcTitle}">${srcIcon}</span>
@@ -999,13 +1107,13 @@ function renderTxnCards(txns) {
       </div>
       ${t.note ? `<div class="txn-note-row">
         <span class="note-cell" onclick="editNote(event,'${t.id}','${t.source}')"
-          title="לחץ לעריכת הערה">${escHtml(t.note)}</span>
+          title="לחץ לעריכת הערה">${mark(t.note, toks)}</span>
       </div>` : ''}
     </div>`;
   }).join('');
 }
 
-function renderTxnTable(txns) {
+function renderTxnTable(txns, toks = []) {
   const cats = [...new Set(allTxns.map(t=>t.category_name))];
 
   document.getElementById('tableHead').innerHTML = COLS.map(c =>
@@ -1020,14 +1128,14 @@ function renderTxnTable(txns) {
     const ownerColor = allOwners.findIndex(o=>o.name===t.account_owner) === 0 ? 'var(--accent)' : 'var(--accent2)';
     const noteHtml = `<span class="note-cell ${t.note?'':'empty'}"
       onclick="editNote(event,'${t.id}','${t.source}')"
-      title="לחץ להוספת/עריכת הערה">${escHtml(t.note||'')}</span>`;
+      title="לחץ להוספת/עריכת הערה">${mark(t.note||'', toks)}</span>`;
     return `<tr>
       <td style="color:var(--text-muted)">${t.purchase_date || t.activity_date||'—'}</td>
-      <td style="font-weight:500">${escHtml(t.merchant_name||'—')}</td>
+      <td style="font-weight:500">${mark(t.merchant_name||'—', toks)}</td>
       <td class="amount-cell">₪${fmt(t.amount)}</td>
       <td><span class="badge" style="background:${color}22;color:${color};cursor:pointer;border:1px dashed ${color}55"
         title="לחץ לשינוי קטגוריה" onclick="editCategory(event,this,'${t.id}','${t.source}')">
-        ${t.category_icon||''} ${t.category_name||'—'} <span style="opacity:.5;font-size:10px">✎</span></span></td>
+        ${t.category_icon||''} ${mark(t.category_name||'—', toks)} <span style="opacity:.5;font-size:10px">✎</span></span></td>
       <td class="col-note">${noteHtml}</td>
       <td class="col-owner"><span class="owner-badge" style="background:${ownerColor}22;color:${ownerColor}">${t.account_owner||'—'}</span></td>
       <td class="col-source"><span title="${t.recurring_id?'קבועה':isManual?'ידני':'MAX'}">${t.recurring_id?'🔁':isManual?'✏️':'💳'}</span></td>
@@ -1118,7 +1226,7 @@ window.editNote = function(evt, txnId, source) {
       });
       // update in memory
       const t = allTxns.find(t => String(t.id) === String(txnId));
-      if (t) t.note = note;
+      if (t) { t.note = note; delete t._hay; }   // note is part of the search haystack
     } catch(e) { /* silent */ }
     renderTable();
   };
